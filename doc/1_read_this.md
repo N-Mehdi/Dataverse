@@ -50,8 +50,6 @@ Les données ont été fournies par Météorage. Elles couvrent **10 ans d'obser
 
 > **Note :** `alert_airport_id` et `is_last_lightning_cloud_ground` ne sont renseignés que pour les éclairs à moins de 20 km de l'aéroport.
 
-> **Note :** Les données intra-nuage de Pise pour 2016 sont potentiellement incorrectes — à écarter pour ce type d'analyse.
-
 ---
 
 ## Structure du projet
@@ -63,6 +61,10 @@ data_battle/
 │   ├── segment_alerts_all_airports_train.csv   ← fichier brut à placer ici
 │   └── features.parquet                        ← généré par features.py
 │
+├── doc/
+│   ├── features.md                             ← définition de toutes les features
+│   └── 1_read_this.md                          ← point d'entrée pour comprendre le projet
+|
 ├── models/
 │   ├── rsf_model.pkl                           ← généré par model.py
 │   └── cox_model.pkl                           ← généré par model.py
@@ -80,7 +82,6 @@ data_battle/
 │   └── evaluate.py                             ← évaluation complète sur le jeu de test
 │
 ├── analyze_false_allclear.py                   ← analyse des faux all-clear
-├── features.md                                 ← documentation des features
 ├── pyproject.toml
 └── README.md
 ```
@@ -114,51 +115,6 @@ data/segment_alerts_all_airports_train.csv
 
 ---
 
-## Exécution
-
-Les scripts s'enchaînent dans cet ordre. Chaque étape produit un fichier utilisé par la suivante.
-
-### Étape 1 — Feature engineering
-
-Lit le CSV brut et calcule les features par alerte. Produit `data/features.parquet`.
-
-```bash
-python src/features.py data/segment_alerts_all_airports_train.csv
-```
-
-### Étape 2 — Entraînement des modèles
-
-Entraîne un modèle Cox PH (interprétable) et un Random Survival Forest (performant). Produit les fichiers `.pkl` dans `models/`.
-
-```bash
-python src/model.py data/features.parquet
-```
-
-### Étape 3 — Évaluation complète
-
-Évalue le modèle RSF sur le jeu de test (20% des alertes, split stratifié par aéroport). Affiche les métriques et produit `outputs/evaluation.png`.
-
-```bash
-python src/evaluate.py data/features.parquet
-```
-
-### Étape 4 (optionnelle) — Analyse des faux all-clear
-
-Analyse en détail les alertes pour lesquelles le modèle recommande de lever trop tôt. Produit `outputs/false_allclear_analysis.png`.
-
-```bash
-python analyze_false_allclear.py data/features.parquet
-```
-
-### Étape 5 (optionnelle) — Inférence sur une alerte
-
-Simule la prédiction minute par minute sur une alerte réelle tirée aléatoirement du dataset.
-
-```bash
-python src/predict.py data/features.parquet
-```
-
----
 
 ## Description des fichiers source
 
@@ -170,7 +126,7 @@ Les features sont divisées en deux groupes :
 - **Actives** (17) : utilisées par les modèles
 - **Inactives** (6) : calculées mais non utilisées (importance trop faible), conservées pour usage futur
 
-→ Voir `features.md` pour la définition complète de chaque feature.
+→ Voir `doc/features.md` pour la définition complète de chaque feature.
 
 ### `src/model.py`
 
@@ -180,11 +136,12 @@ Entraîne deux modèles de survie sur les features calculées :
 - **Cox PH** (`lifelines`) : modèle linéaire interprétable, bonne baseline
 - **Random Survival Forest** (`scikit-survival`) : modèle non-linéaire, capture les interactions, meilleure performance
 
-Le split train/test est **80/20, stratifié par aéroport** pour garantir la représentativité de chaque site dans les deux ensembles.
+Le split train/test est **80/20, stratifié par aéroport** pour garantir la représentativité de chaque site dans les deux ensembles.  
+ref. tout en bas pour expliquer les modèles entraînés.
 
 ### `src/predict.py`
 
-Charge un modèle sauvegardé et prédit la probabilité de fin d'alerte pour une alerte en cours. Prend en entrée un dictionnaire de features et le temps écoulé depuis le dernier éclair CG (`time_since_last_cg`). Retourne la courbe de survie conditionnelle, la recommandation (LEVER / MAINTENIR) et le gain estimé vs baseline.
+Charge un modèle sauvegardé et prédit la probabilité de fin d'alerte pour une alerte en cours. Prend en entrée un dictionnaire de features et le temps écoulé depuis le dernier éclair CG (= Cloud-Ground, Nuage-sol) (`time_since_last_cg`). Retourne la courbe de survie conditionnelle, la recommandation (LEVER / MAINTENIR) et le gain estimé vs baseline.
 
 ### `src/evaluate.py`
 
@@ -195,9 +152,11 @@ Charge un modèle sauvegardé et prédit la probabilité de fin d'alerte pour un
 3. Distribution du gain par aéroport
 4. Courbe trade-off gain / taux de faux all-clear selon le seuil
 
+→ Voir `outputs/evaluation.png` pour les 4 graphiques précédents.
+
 ### `analyze_false_allclear.py`
 
-Analyse les alertes mal classées (levée recommandée avant la fin réelle de l'orage). Identifie les patterns communs : aéroport concerné, durée réelle des alertes, marge d'erreur, et profil des features pour comprendre pourquoi le modèle se trompe.
+Analyse les alertes mal classées (levée de l'alerte recommandée avant la fin réelle de l'orage). Identifie les patterns communs : aéroport concerné, durée réelle des alertes, marge d'erreur, et profil des features pour comprendre pourquoi le modèle se trompe.
 
 ---
 
@@ -228,3 +187,88 @@ C-index RSF            : 0.969
 - Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min) — le modèle se trompe sur les orages qui font des pauses avant de reprendre
 - Tester une **optimisation du seuil par aéroport** plutôt qu'un seuil global à 0.80
 - Explorer des **features de contexte météo** (saison, heure de la journée)
+
+
+
+## Exécution
+
+Les scripts s'enchaînent dans cet ordre. Chaque étape produit un fichier utilisé par la suivante.  
+Veuillez executer les codes suivants un par un si vous souhaitez découvrir les analyses faites pour l'instant.
+
+### Étape 1 — Feature engineering
+
+Lit le CSV brut et calcule les features par alerte. Produit `data/features.parquet`.
+
+```bash
+python src/features.py data/segment_alerts_all_airports_train.csv
+```
+
+### Étape 2 — Entraînement des modèles
+
+Entraîne un modèle Cox PH (interprétable) et un Random Survival Forest (performant). Produit les fichiers `.pkl` dans `models/`.
+
+```bash
+python src/model.py data/features.parquet
+```
+
+Remarques sur l'entraînement des modèles :  
+2627 - 1661 = 966 alertes sont perdues à cause de deux filtres :
+
+duration > 0 — les alertes avec un seul éclair CG ont une durée de 0 (début = fin). D'après les stats de features.py, le 25e percentile de durée est 0, donc une grosse partie des alertes sont des éclairs isolés sans durée mesurable.  
+dropna — quelques alertes avec des valeurs manquantes dans les features.  
+
+Le filtre duration > 0 est le plus impactant. Ces alertes à durée nulle correspondent à des orages très courts avec un seul éclair CG — elles ne sont pas vraiment utilisables pour un modèle de survie (pas de séquence temporelle à analyser).  
+
+À voir si on peut créer une feature pour intégrer ce type d'alertes. 
+
+### Étape 3 — Évaluation complète
+
+Évalue le modèle RSF sur le jeu de test (20% des alertes, split stratifié par aéroport). Affiche les métriques et produit `outputs/evaluation.png`.
+
+```bash
+python src/evaluate.py data/features.parquet
+```
+
+### Étape 4 (optionnelle) — Analyse des faux all-clear
+
+Analyse en détail les alertes pour lesquelles le modèle recommande de lever trop tôt. Produit `outputs/false_allclear_analysis.png`.
+
+```bash
+python analyze_false_allclear.py data/features.parquet
+```
+
+### Étape 5 (optionnelle) — Inférence sur une alerte
+
+Simule la prédiction minute par minute sur une alerte réelle tirée aléatoirement du dataset.
+
+```bash
+python src/predict.py data/features.parquet
+```
+
+---
+## Modèle de survie
+
+Un modèle de survie est un type de modèle statistique conçu pour prédire le temps avant qu'un événement se produise. Dans notre cas, l'événement c'est la fin de l'orage. Ce qui rend ces modèles spéciaux par rapport à une régression classique, c'est qu'ils gèrent naturellement l'incertitude temporelle : on ne sait pas encore quand l'orage va finir, on veut juste estimer la probabilité qu'il soit encore actif dans X minutes.
+
+## Kaplan-Meier
+
+Kaplan-Meier est le point de départ de toute analyse de survie. Il ne prend aucune feature en entrée — il regarde juste la distribution empirique des durées d'alerte dans les données historiques et construit une courbe qui dit "après X minutes, quelle proportion des orages est encore active ?". C'est utile pour comprendre la forme générale du problème : est-ce que les orages finissent surtout en moins de 20 min ? En moins de 60 min ? C'est une exploration, pas un modèle prédictif.
+
+## Le modèle Cox PH
+
+Cox PH (Proportional Hazards) est le modèle de survie classique en statistique. Il suppose que chaque feature multiplie le "risque de fin d'orage" par un facteur constant dans le temps — c'est l'hypothèse des hasards proportionnels. Par exemple, si "dist_min" a un coefficient négatif, un éclair proche de l'aéroport réduit la probabilité de fin imminente. L'avantage c'est qu'il est très interprétable : on peut lire directement l'effet de chaque feature. L'inconvénient c'est qu'il est linéaire et ne capture pas les interactions entre features.
+
+## Le modèle RSF (Random Survival Forest)
+
+Random Survival Forest est l'extension non-linéaire. C'est une forêt aléatoire adaptée à la survie : chaque arbre apprend à séparer les alertes courtes des alertes longues en combinant plusieurs features à la fois. Il n'a aucune hypothèse sur la forme des relations entre features et durée, ce qui lui permet de détecter des patterns complexes — par exemple "si l'orage a fait plusieurs pauses ET que l'amplitude est élevée, alors il va probablement durer encore longtemps". C'est notre modèle principal.
+
+### Le C-index
+
+Le C-index (Concordance index) mesure la capacité du modèle RSF à bien ordonner les durées d'alerte.  
+Concrètement : on prend toutes les paires d'alertes possibles dans le jeu de test, et on vérifie que le modèle prédit bien "l'alerte A va durer plus longtemps que l'alerte B" quand c'est effectivement le cas dans la réalité.
+
+0.5 = le modèle est aussi bon qu'un tirage aléatoire  
+1.0 = le modèle ordonne parfaitement toutes les paires  
+0.969 = sur 100 paires d'alertes, le modèle se trompe sur l'ordre seulement ~3 fois  
+
+Ce que le C-index ne mesure pas : la précision absolue du temps de levée prédit. Un modèle peut avoir un excellent C-index mais quand même lever trop tôt sur certaines alertes — c'est exactement ce qu'on observe avec nos 19% de faux all-clear. C'est pourquoi on utilise aussi le gain moyen et le taux de faux all-clear comme métriques complémentaires.

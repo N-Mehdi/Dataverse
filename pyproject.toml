@@ -1,0 +1,23 @@
+[project]
+name = "dataverse"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "joblib>=1.5.3",
+    "jupyter>=1.1.1",
+    "lifelines>=0.30.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "pandas>=3.0.1",
+    "ruff>=0.15.5",
+    "scikit-learn>=1.8.0",
+    "scikit-survival>=0.27.0",
+    "streamlit>=1.19.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+]
