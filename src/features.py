@@ -42,6 +42,7 @@ ACTIVE_FEATURES = [
     "activity_variance",  # variance du comptage par fenêtre de 5 min
     "pause_max",  # plus longue pause entre deux éclairs CG (min)
     "intensity_persistence",  # proportion du temps avec activité > moyenne
+    "pause_ratio",  # pause_max / elapsed_time — relativise la pause par rapport à la durée totale
 ]
 
 # ---------------------------------------------------------------------------
@@ -255,6 +256,11 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
         # ── Structure temporelle (nouvelles features) ────────────────────────
         burst_feats = _compute_burst_features(grp_cg["date"], duration, bin_size=5)
 
+        # pause_ratio : pause_max rapportée à la durée totale
+        # Ex : pause de 15 min sur une alerte de 20 min = 0.75 (inquiétant)
+        #      pause de 15 min sur une alerte de 120 min = 0.125 (moins inquiétant)
+        pause_ratio = burst_feats["pause_max"] / duration if duration > 0 else 0.0
+
         # ── Features inactives ───────────────────────────────────────────────
         recent_all = grp_all[grp_all["date"] >= t_window]
         n_ic_total = len(grp_all) - n_cg_total
@@ -293,6 +299,7 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
                 "activity_variance": burst_feats["activity_variance"],
                 "pause_max": burst_feats["pause_max"],
                 "intensity_persistence": burst_feats["intensity_persistence"],
+                "pause_ratio": pause_ratio,
                 # ── Inactives ────────────────────────────────────────────────────
                 "n_ic_total": n_ic_total,
                 "ratio_ic_cg": ratio_ic_cg,

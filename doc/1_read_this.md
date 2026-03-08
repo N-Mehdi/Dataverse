@@ -209,7 +209,7 @@ python src/evaluate.py data/features.parquet
 Analyse en détail les alertes pour lesquelles le modèle recommande de lever trop tôt. Produit `outputs/false_allclear_analysis.png`.
 
 ```bash
-python analyze_false_allclear.py data/features.parquet
+python src/analyse_false_allclear.py data/features.parquet
 ```
 
 ### Étape 5 (optionnelle) — Inférence sur une alerte
