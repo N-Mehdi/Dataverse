@@ -59,6 +59,7 @@ Dataverse/
 │
 ├── data/
 │   ├── segment_alerts_all_airports_train.csv   ← fichier brut à placer ici
+|   ├── exploration.ipynb                       ← fichier pour l'analyse de la bdd
 │   └── features.parquet                        ← généré par features.py
 │
 ├── doc/
