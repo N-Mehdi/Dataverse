@@ -55,7 +55,7 @@ Les données ont été fournies par Météorage. Elles couvrent **10 ans d'obser
 ## Structure du projet
 
 ```
-data_battle/
+Dataverse/
 │
 ├── data/
 │   ├── segment_alerts_all_airports_train.csv   ← fichier brut à placer ici
@@ -76,12 +76,12 @@ data_battle/
 │   └── false_allclear_analysis.png             ← généré par analyze_false_allclear.py
 │
 ├── src/
+|   ├── analyse_false_all_clear.py              ← analyse des faux all-clear
 │   ├── features.py                             ← feature engineering
 │   ├── model.py                                ← entraînement des modèles
 │   ├── predict.py                              ← inférence sur une alerte
 │   └── evaluate.py                             ← évaluation complète sur le jeu de test
 │
-├── analyze_false_allclear.py                   ← analyse des faux all-clear
 ├── pyproject.toml
 └── README.md
 ```
@@ -92,20 +92,13 @@ data_battle/
 
 Ce projet utilise **uv** pour la gestion de l'environnement Python.
 
-### 1. Cloner le dépôt
-
-```bash
-git clone <url-du-repo>
-cd data_battle
-```
-
-### 2. Installer les dépendances
+### 1. Installer les dépendances
 
 ```bash
 uv sync
 ```
 
-### 3. Placer les données
+### 2. Placer les données
 
 Copier le fichier CSV brut fourni par Météorage dans le dossier `data/` :
 
@@ -209,7 +202,7 @@ python src/evaluate.py data/features.parquet
 Analyse en détail les alertes pour lesquelles le modèle recommande de lever trop tôt. Produit `outputs/false_allclear_analysis.png`.
 
 ```bash
-python src/analyse_false_allclear.py data/features.parquet
+python src/analyse_false_all_clear.py data/features.parquet
 ```
 
 ### Étape 5 (optionnelle) — Inférence sur une alerte
