@@ -48,7 +48,7 @@ Les données ont été fournies par Météorage. Elles couvrent **10 ans d'obser
 | `alert_airport_id` | Numéro de l'alerte à laquelle appartient l'éclair |
 | `is_last_lightning_cloud_ground` | `True` si c'est le dernier éclair nuage-sol d'une alerte |
 
-> **Note :** `alert_airport_id` et `is_last_lightning_cloud_ground` ne sont renseignés que pour les éclairs à moins de 20 km de l'aéroport.
+> **Note :** `alert_airport_id` et `is_last_lightning_cloud_ground` ne sont renseignés que pour les éclairs de type Nuage-Sol à moins de 20 km de l'aéroport.
 
 ---
 
@@ -115,8 +115,12 @@ data/segment_alerts_all_airports_train.csv
 
 ---
 
+## Analyse descriptive
+Avant de commencer la modélisation, regardez d'abord l'nalyse descriptive dans data/exploration.ipynb.  
+Pour executer une celule : ctrl + enter dans la cellule (cliquer dans la cellule avant le raccourci)  
+Pour executer une cellule et passer à la suivante : ctrl + shift + enter
 
-## Description des fichiers source
+## Description des fichiers source (src)
 
 ### `src/features.py`
 
@@ -159,35 +163,6 @@ Charge un modèle sauvegardé et prédit la probabilité de fin d'alerte pour un
 Analyse les alertes mal classées (levée de l'alerte recommandée avant la fin réelle de l'orage). Identifie les patterns communs : aéroport concerné, durée réelle des alertes, marge d'erreur, et profil des features pour comprendre pourquoi le modèle se trompe.
 
 ---
-
-## Résultats actuels
-
-```
-Alertes évaluées       : 526
-Gain moyen             : +6.6 min
-Gain médian            : +17.0 min
-Modèle bat baseline    : 347/526 (66%)
-Faux all-clear         : 100/526 (19%)
-C-index RSF            : 0.969
-```
-
-| Aéroport | N | Gain moyen | Gain médian | % gain | % faux all-clear |
-|---|---|---|---|---|---|
-| Ajaccio | 106 | +9.0 min | +19.5 min | 71% | 15% |
-| Bastia | 107 | +4.6 min | +11.0 min | 64% | 20% |
-| Biarritz | 118 | +7.5 min | +20.0 min | 66% | 17% |
-| Nantes | 41 | +5.5 min | +20.0 min | 61% | 27% |
-| Pise | 154 | +6.1 min | +14.0 min | 65% | 21% |
-
----
-
-## Pistes d'amélioration
-
-- **Nantes** a le taux de faux all-clear le plus élevé (27%) — piste : features spécifiques ou modèle dédié
-- Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min) — le modèle se trompe sur les orages qui font des pauses avant de reprendre
-- Tester une **optimisation du seuil par aéroport** plutôt qu'un seuil global à 0.80
-- Explorer des **features de contexte météo** (saison, heure de la journée)
-
 
 
 ## Exécution
@@ -272,3 +247,34 @@ Concrètement : on prend toutes les paires d'alertes possibles dans le jeu de te
 0.969 = sur 100 paires d'alertes, le modèle se trompe sur l'ordre seulement ~3 fois  
 
 Ce que le C-index ne mesure pas : la précision absolue du temps de levée prédit. Un modèle peut avoir un excellent C-index mais quand même lever trop tôt sur certaines alertes — c'est exactement ce qu'on observe avec nos 19% de faux all-clear. C'est pourquoi on utilise aussi le gain moyen et le taux de faux all-clear comme métriques complémentaires.
+
+
+---
+
+## Résultats actuels
+
+```
+Alertes évaluées       : 526
+Gain moyen             : +6.6 min
+Gain médian            : +17.0 min
+Modèle bat baseline    : 347/526 (66%)
+Faux all-clear         : 100/526 (19%)
+C-index RSF            : 0.969
+```
+
+| Aéroport | N | Gain moyen | Gain médian | % gain | % faux all-clear |
+|---|---|---|---|---|---|
+| Ajaccio | 106 | +9.0 min | +19.5 min | 71% | 15% |
+| Bastia | 107 | +4.6 min | +11.0 min | 64% | 20% |
+| Biarritz | 118 | +7.5 min | +20.0 min | 66% | 17% |
+| Nantes | 41 | +5.5 min | +20.0 min | 61% | 27% |
+| Pise | 154 | +6.1 min | +14.0 min | 65% | 21% |
+
+---
+
+## Pistes d'amélioration
+
+- **Nantes** a le taux de faux all-clear le plus élevé (27%) — piste : features spécifiques ou modèle dédié
+- Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min) — le modèle se trompe sur les orages qui font des pauses avant de reprendre
+- Tester une **optimisation du seuil par aéroport** plutôt qu'un seuil global à 0.80
+- Explorer des **features de contexte météo** (saison, heure de la journée)
