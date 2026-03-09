@@ -8,6 +8,12 @@ on calcule des features à l'instant du dernier éclair nuage-sol connu,
 puis on construit la variable cible pour l'analyse de survie :
   - duration  : durée totale de l'alerte en minutes
   - event     : 1 si l'alerte est terminée (non censurée), 0 sinon
+
+Orientations v3 :
+  - Ajout features azimuth : direction et rotation de l'orage
+  - Ajout features maxis : prise en compte de l'erreur de localisation
+  - Mieux détecter les orages à longues pauses qui reprennent
+  - Maximiser la sécurité (réduire les faux all-clear)
 """
 
 import pandas as pd
@@ -22,45 +28,54 @@ ACTIVE_FEATURES = [
     # ── Comptage ────────────────────────────────────────────────────────────
     "n_cg_total",  # nombre total d'éclairs CG dans l'alerte
     "n_cg_recent",  # éclairs CG dans les 10 dernières minutes
-    "n_cg_last5",  # éclairs CG dans les 5 dernières minutes (fenêtre courte)
+    "n_cg_last5",  # éclairs CG dans les 5 dernières minutes
     "activity_trend",  # 2ème moitié - 1ère moitié (< 0 = décroissance)
-    "cg_density",  # n_cg_total / duration — densité d'éclairs/min
-    # ── Amplitude (intensité en kA) ─────────────────────────────────────────
-    "amp_max",  # intensité maximale
-    "amp_mean",  # intensité moyenne
-    "amp_last",  # amplitude du dernier éclair CG (fort = orage encore intense)
-    "amp_trend_global",  # pente régression linéaire amplitude/temps (kA/min)
-    "amp_trend_recent",  # idem sur les 10 dernières minutes
-    "amp_decay_rate",  # amp_trend_global / amp_mean — décroissance normalisée
-    # ── Distance à l'aéroport ───────────────────────────────────────────────
-    "dist_min",  # distance minimale atteinte
-    "dist_mean",  # distance moyenne
-    "dist_last",  # distance du dernier éclair CG
-    "dist_last_vs_mean",  # dist_last - dist_mean (> 0 = s'éloigne, < 0 = se rapproche)
-    "dist_recent_min",  # distance minimale sur les 10 dernières minutes
-    "dist_trend_global",  # pente régression linéaire distance/temps (km/min)
-    "dist_trend_recent",  # idem sur les 10 dernières minutes
-    "dist_trend_last5",  # tendance distance sur les 5 dernières minutes
+    "cg_density",  # n_cg_total / duration
+    # ── Amplitude ───────────────────────────────────────────────────────────
+    "amp_max",
+    "amp_mean",
+    "amp_last",
+    "amp_trend_global",
+    "amp_trend_recent",
+    "amp_decay_rate",
+    # ── Distance brute ───────────────────────────────────────────────────────
+    "dist_min",
+    "dist_mean",
+    "dist_last",
+    "dist_last_vs_mean",
+    "dist_recent_min",
+    "dist_trend_global",
+    "dist_trend_recent",
+    "dist_trend_last5",
+    # ── Distance ajustée par maxis (pessimiste) ──────────────────────────────
+    "dist_min_adjusted",  # dist_min - maxis à cet éclair (distance pessimiste)
+    "dist_last_adjusted",  # dist_last - maxis_last
+    "maxis_mean",  # erreur de localisation moyenne de l'alerte
+    "maxis_last",  # erreur du dernier éclair CG
+    # ── Direction / azimuth ──────────────────────────────────────────────────
+    "azimuth_last",  # direction du dernier éclair (0-360°)
+    "azimuth_spread",  # dispersion angulaire (std circulaire) — orage localisé vs entourant
+    "azimuth_trend",  # rotation angulaire moyenne entre éclairs consécutifs (deg/min)
+    "azimuth_last_vs_mean",  # écart entre dernier azimuth et azimuth moyen
     # ── Temporel ────────────────────────────────────────────────────────────
-    "elapsed_time",  # durée déjà écoulée depuis le début de l'alerte (min)
-    "inter_time_last3",  # temps moyen entre les 3 derniers éclairs CG
+    "elapsed_time",
+    "inter_time_last3",
     # ── Persistance / structure temporelle ──────────────────────────────────
-    "n_bursts",  # nombre de reprises d'activité après un creux
-    "activity_variance",  # variance du comptage par fenêtre de 5 min
-    "pause_max",  # plus longue pause entre deux éclairs CG (min)
-    "pause_ratio",  # pause_max / elapsed_time
-    "intensity_persistence",  # proportion du temps avec activité > moyenne
-    "pause_since_peak",  # minutes écoulées depuis le pic d'activité
-    # ── Risque de reprise (orages longs avec pauses) ─────────────────────────
-    "resume_risk",  # n_bursts * pause_max — score de risque de reprise
-    "long_pause_count",  # nombre de pauses > 10 min
-    "pause_cv",  # coefficient de variation des pauses (irrégularité)
-    # ── Intra-nuage (réactivé) ────────────────────────────────────────────────
-    "n_ic_recent",  # activité intra-nuage récente = orage encore électriquement actif
-    "ratio_ic_cg",  # ratio intra-nuage / nuage-sol global
-    # ── Saisonnalité ─────────────────────────────────────────────────────────
-    "month",  # mois de l'alerte (orages d'été plus imprévisibles)
-    "season",  # saison encodée (0=hiver, 1=printemps, 2=été, 3=automne)
+    "n_bursts",
+    "activity_variance",
+    "pause_max",
+    "pause_ratio",
+    "intensity_persistence",
+    "pause_since_peak",
+    "resume_risk",
+    "long_pause_count",
+    "pause_cv",
+    # ── Intra-nuage ──────────────────────────────────────────────────────────
+    "n_ic_recent",
+    "ratio_ic_cg",
+    # ── Saison / mois ────────────────────────────────────────────────────────
+    "month",
+    "season",
 ]
 
 # ---------------------------------------------------------------------------
@@ -68,10 +83,10 @@ ACTIVE_FEATURES = [
 # ---------------------------------------------------------------------------
 
 INACTIVE_FEATURES = [
-    "n_ic_total",  # éclairs intra-nuage total (corrélé à ratio_ic_cg)
-    "ratio_ic_recent",  # ratio intra-nuage récents
-    "amp_recent_mean",  # amplitude moyenne récente (redondant avec amp_trend_recent)
-    "time_since_last_cg",  # toujours 0 dans le train set, utile en inférence
+    "n_ic_total",
+    "ratio_ic_recent",
+    "amp_recent_mean",
+    "time_since_last_cg",
 ]
 
 
@@ -86,18 +101,12 @@ def load_data(path: str) -> pd.DataFrame:
     return df
 
 
-# ---------------------------------------------------------------------------
-# Sous-ensembles utiles
-# ---------------------------------------------------------------------------
-
-
 def get_alerts(df: pd.DataFrame) -> pd.DataFrame:
-    """Retourne uniquement les éclairs appartenant à une alerte (< 20 km)."""
     return df[df["airport_alert_id"].notna()].copy()
 
 
 # ---------------------------------------------------------------------------
-# Utilitaire : pente de régression linéaire
+# Utilitaires
 # ---------------------------------------------------------------------------
 
 
@@ -112,8 +121,37 @@ def _linear_slope(times_min: np.ndarray, values: np.ndarray) -> float:
     return float(num / den) if den > 0 else 0.0
 
 
+def _circular_std(angles_deg: np.ndarray) -> float:
+    """Écart-type circulaire des angles en degrés (0-360)."""
+    if len(angles_deg) < 2:
+        return 0.0
+    rad = np.deg2rad(angles_deg)
+    S = np.mean(np.sin(rad))
+    C = np.mean(np.cos(rad))
+    R = np.sqrt(S**2 + C**2)
+    # std circulaire en degrés
+    return float(np.rad2deg(np.sqrt(-2 * np.log(np.clip(R, 1e-10, 1.0)))))
+
+
+def _circular_mean(angles_deg: np.ndarray) -> float:
+    """Moyenne circulaire des angles en degrés."""
+    if len(angles_deg) == 0:
+        return 0.0
+    rad = np.deg2rad(angles_deg)
+    S = np.mean(np.sin(rad))
+    C = np.mean(np.cos(rad))
+    mean_rad = np.arctan2(S, C)
+    return float(np.rad2deg(mean_rad) % 360)
+
+
+def _angular_diff(a1: float, a2: float) -> float:
+    """Différence angulaire signée entre deux angles (résultat dans [-180, 180])."""
+    diff = (a2 - a1 + 180) % 360 - 180
+    return float(diff)
+
+
 # ---------------------------------------------------------------------------
-# Features structure temporelle + risque de reprise
+# Features structure temporelle
 # ---------------------------------------------------------------------------
 
 
@@ -122,10 +160,6 @@ def _compute_burst_features(
     duration_min: float,
     bin_size: int = 5,
 ) -> dict:
-    """
-    Calcule des features capturant la structure temporelle de l'activité CG,
-    avec focus sur la détection des orages longs avec reprises.
-    """
     if len(dates) < 2 or duration_min <= 0:
         return {
             "n_bursts": 0,
@@ -140,49 +174,39 @@ def _compute_burst_features(
 
     t_start = dates.min()
     times_min = (dates - t_start).dt.total_seconds().values / 60
-    times_min_sorted = np.sort(times_min)
 
-    # ── Comptage par fenêtre ─────────────────────────────────────────────────
     n_bins = max(1, int(np.ceil(duration_min / bin_size)))
     counts, bin_edges = np.histogram(times_min, bins=n_bins, range=(0, duration_min))
 
-    # n_bursts : transitions creux→actif
     is_active = counts > 0
     n_bursts = int(np.sum((~is_active[:-1]) & is_active[1:]))
-
     activity_variance = float(counts.var())
 
-    # ── Pauses inter-éclairs ─────────────────────────────────────────────────
-    inter_times = np.diff(times_min_sorted)
+    inter_times = np.diff(np.sort(times_min))
     pause_max = float(inter_times.max()) if len(inter_times) > 0 else 0.0
 
-    # long_pause_count : nombre de pauses > 10 min
-    # Un orage qui s'interrompt plusieurs fois longtemps est très suspect
-    long_pause_count = int((inter_times > 10.0).sum()) if len(inter_times) > 0 else 0
-
-    # pause_cv : coefficient de variation des pauses
-    # Élevé = pauses très irrégulières = orage chaotique, imprévisible
-    if len(inter_times) > 1 and inter_times.mean() > 0:
-        pause_cv = float(inter_times.std() / inter_times.mean())
-    else:
-        pause_cv = 0.0
-
-    # intensity_persistence
     mean_count = counts.mean()
     intensity_persistence = (
         float((counts > mean_count).mean()) if mean_count > 0 else 0.0
     )
 
-    # pause_since_peak : minutes depuis le pic d'activité jusqu'à la fin
-    # Si le pic est récent → orage encore intense
-    # Si le pic est lointain avec des reprises → très dangereux
     peak_bin = int(np.argmax(counts))
     peak_time = bin_edges[peak_bin]
-    pause_since_peak = max(0.0, float(duration_min - peak_time))
+    pause_since_peak = max(0.0, duration_min - peak_time)
 
-    # resume_risk : score composite orages longs avec reprises
-    # n_bursts * pause_max : beaucoup de reprises + longues pauses = danger
-    resume_risk = float(n_bursts * pause_max)
+    # resume_risk : pause_max * n_bursts — orages qui ont déjà repris après
+    # une longue pause sont les plus dangereux
+    resume_risk = pause_max * n_bursts
+
+    # long_pause_count : nombre de pauses > 5 min entre éclairs consécutifs
+    long_pause_count = int((inter_times > 5).sum()) if len(inter_times) > 0 else 0
+
+    # pause_cv : coefficient de variation des pauses (irrégularité temporelle)
+    # élevé = orage très irrégulier = imprévisible
+    if len(inter_times) > 1 and inter_times.mean() > 0:
+        pause_cv = float(inter_times.std() / inter_times.mean())
+    else:
+        pause_cv = 0.0
 
     return {
         "n_bursts": n_bursts,
@@ -194,23 +218,6 @@ def _compute_burst_features(
         "long_pause_count": long_pause_count,
         "pause_cv": pause_cv,
     }
-
-
-# ---------------------------------------------------------------------------
-# Encodage de la saison
-# ---------------------------------------------------------------------------
-
-
-def _get_season(month: int) -> int:
-    """0=hiver, 1=printemps, 2=été, 3=automne"""
-    if month in (12, 1, 2):
-        return 0
-    elif month in (3, 4, 5):
-        return 1
-    elif month in (6, 7, 8):
-        return 2
-    else:
-        return 3
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +238,7 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
             (all_lgt["airport"] == airport) & (all_lgt["airport_alert_id"] == alert_id)
         ].sort_values("date")
 
-        # ── Début et fin de l'alerte ─────────────────────────────────────────
+        # ── Début et fin ─────────────────────────────────────────────────────
         t_start = grp_cg["date"].min()
         t_end = grp_cg["date"].max()
         duration = (t_end - t_start).total_seconds() / 60
@@ -240,34 +247,76 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
 
         times_all = (grp_cg["date"] - t_start).dt.total_seconds().values / 60
 
-        # ── Saisonnalité ─────────────────────────────────────────────────────
-        month = int(t_start.month)
-        season = _get_season(month)
-
         # ── Comptage ─────────────────────────────────────────────────────────
         n_cg_total = len(grp_cg)
         t_mid = t_start + (t_end - t_start) / 2
-        n_cg_first_half = len(grp_cg[grp_cg["date"] <= t_mid])
-        n_cg_second_half = len(grp_cg[grp_cg["date"] > t_mid])
-        activity_trend = n_cg_second_half - n_cg_first_half
+        activity_trend = len(grp_cg[grp_cg["date"] > t_mid]) - len(
+            grp_cg[grp_cg["date"] <= t_mid]
+        )
+        cg_density = n_cg_total / duration if duration > 0 else 0.0
 
-        cg_density = float(n_cg_total / duration) if duration > 0 else 0.0
-
-        # ── Amplitude globale ────────────────────────────────────────────────
+        # ── Amplitude ────────────────────────────────────────────────────────
         amps = grp_cg["amplitude"].abs().values
         amp_max = float(amps.max())
         amp_mean = float(amps.mean())
-        amp_last = float(amps[-1])
         amp_trend_global = _linear_slope(times_all, amps)
-        amp_decay_rate = float(amp_trend_global / amp_mean) if amp_mean > 0 else 0.0
+        last_row = grp_cg.iloc[-1]
+        amp_last = float(abs(last_row["amplitude"]))
+        amp_decay_rate = amp_trend_global / amp_mean if amp_mean > 0 else 0.0
 
-        # ── Distance globale ─────────────────────────────────────────────────
+        # ── Distance brute ───────────────────────────────────────────────────
         dists = grp_cg["dist"].values
         dist_min = float(dists.min())
         dist_mean = float(dists.mean())
-        dist_last = float(dists[-1])
+        dist_last = float(last_row["dist"])
         dist_last_vs_mean = dist_last - dist_mean
         dist_trend_global = _linear_slope(times_all, dists)
+
+        # ── Maxis (erreur de localisation) ───────────────────────────────────
+        maxis_vals = grp_cg["maxis"].values
+        maxis_mean = float(maxis_vals.mean())
+        maxis_last = float(last_row["maxis"])
+
+        # Distance minimale ajustée : on soustrait l'erreur de localisation
+        # pour avoir une borne pessimiste (l'éclair pourrait être plus proche)
+        idx_min = int(np.argmin(dists))
+        maxis_at_min = float(maxis_vals[idx_min])
+        dist_min_adjusted = max(0.0, dist_min - maxis_at_min)
+
+        # Distance du dernier éclair ajustée
+        dist_last_adjusted = max(0.0, dist_last - maxis_last)
+
+        # ── Azimuth (direction de l'orage) ───────────────────────────────────
+        azimuths = grp_cg["azimuth"].values
+
+        # Direction du dernier éclair
+        azimuth_last = float(last_row["azimuth"])
+
+        # Dispersion angulaire : élevée = orage qui entoure l'aéroport (dangereux)
+        azimuth_spread = _circular_std(azimuths)
+
+        # Moyenne circulaire
+        azimuth_mean = _circular_mean(azimuths)
+
+        # Écart entre dernier azimuth et moyenne
+        # > 0 = dernier éclair dans une direction inhabituelle (reprise possible)
+        azimuth_last_vs_mean = abs(_angular_diff(azimuth_mean, azimuth_last))
+
+        # Tendance de rotation : vitesse angulaire moyenne entre éclairs consécutifs
+        # Orage qui tourne = plus imprévisible
+        if len(azimuths) >= 2 and duration > 0:
+            angular_diffs = np.array(
+                [
+                    _angular_diff(azimuths[i], azimuths[i + 1])
+                    for i in range(len(azimuths) - 1)
+                ]
+            )
+            # Vitesse angulaire en deg/min
+            azimuth_trend = float(
+                np.abs(angular_diffs).mean() / (duration / len(azimuths))
+            )
+        else:
+            azimuth_trend = 0.0
 
         # ── Fenêtre récente 10 min ───────────────────────────────────────────
         t_window10 = t_end - pd.Timedelta(minutes=window_minutes)
@@ -290,31 +339,46 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
 
         # ── Fenêtre récente 5 min ────────────────────────────────────────────
         t_window5 = t_end - pd.Timedelta(minutes=5)
-        recent5_cg = grp_cg[grp_cg["date"] >= t_window5]
-        n_cg_last5 = len(recent5_cg)
+        recent_cg5 = grp_cg[grp_cg["date"] >= t_window5]
+        n_cg_last5 = len(recent_cg5)
 
         if n_cg_last5 >= 2:
-            times_rec5 = (recent5_cg["date"] - t_window5).dt.total_seconds().values / 60
-            dist_trend_last5 = _linear_slope(times_rec5, recent5_cg["dist"].values)
+            times_rec5 = (recent_cg5["date"] - t_window5).dt.total_seconds().values / 60
+            dist_trend_last5 = _linear_slope(times_rec5, recent_cg5["dist"].values)
         else:
-            dist_trend_last5 = dist_trend_global
+            dist_trend_last5 = dist_trend_recent
 
         # ── Temps entre les 3 derniers éclairs ───────────────────────────────
         if n_cg_total >= 3:
-            last3_times = times_all[-3:]
+            last3_times = (
+                grp_cg.iloc[-3:]["date"] - t_start
+            ).dt.total_seconds().values / 60
             inter_time_last3 = float(np.diff(last3_times).mean())
         elif n_cg_total >= 2:
-            inter_time_last3 = float(times_all[-1] - times_all[-2])
+            last2_times = (
+                grp_cg.iloc[-2:]["date"] - t_start
+            ).dt.total_seconds().values / 60
+            inter_time_last3 = float(np.diff(last2_times).mean())
         else:
             inter_time_last3 = 0.0
 
-        # ── Structure temporelle + risque de reprise ─────────────────────────
+        # ── Structure temporelle ─────────────────────────────────────────────
         burst_feats = _compute_burst_features(grp_cg["date"], duration, bin_size=5)
         pause_ratio = burst_feats["pause_max"] / duration if duration > 0 else 0.0
 
-        # ── Features intra-nuage ─────────────────────────────────────────────
-        t_window_ic = t_end - pd.Timedelta(minutes=window_minutes)
-        recent_all = grp_all[grp_all["date"] >= t_window_ic]
+        # ── Saison ───────────────────────────────────────────────────────────
+        month = t_start.month
+        if month in [12, 1, 2]:
+            season = 0
+        elif month in [3, 4, 5]:
+            season = 1
+        elif month in [6, 7, 8]:
+            season = 2
+        else:
+            season = 3
+
+        # ── Intra-nuage ──────────────────────────────────────────────────────
+        recent_all = grp_all[grp_all["date"] >= t_window10]
         n_ic_total = len(grp_all) - n_cg_total
         ratio_ic_cg = n_ic_total / max(n_cg_total, 1)
         n_ic_recent = len(recent_all) - n_cg_recent
@@ -332,7 +396,7 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
                 # Cibles survie
                 "duration": duration,
                 "event": event,
-                # ── Actives ──────────────────────────────────────────────────
+                # ── Actives ──────────────────────────────────────────────────────
                 "n_cg_total": n_cg_total,
                 "n_cg_recent": n_cg_recent,
                 "n_cg_last5": n_cg_last5,
@@ -352,6 +416,14 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
                 "dist_trend_global": dist_trend_global,
                 "dist_trend_recent": dist_trend_recent,
                 "dist_trend_last5": dist_trend_last5,
+                "dist_min_adjusted": dist_min_adjusted,
+                "dist_last_adjusted": dist_last_adjusted,
+                "maxis_mean": maxis_mean,
+                "maxis_last": maxis_last,
+                "azimuth_last": azimuth_last,
+                "azimuth_spread": azimuth_spread,
+                "azimuth_trend": azimuth_trend,
+                "azimuth_last_vs_mean": azimuth_last_vs_mean,
                 "elapsed_time": elapsed_time,
                 "inter_time_last3": inter_time_last3,
                 "n_bursts": burst_feats["n_bursts"],
@@ -367,7 +439,7 @@ def compute_alert_features(df: pd.DataFrame, window_minutes: int = 10) -> pd.Dat
                 "ratio_ic_cg": ratio_ic_cg,
                 "month": month,
                 "season": season,
-                # ── Inactives ─────────────────────────────────────────────────
+                # ── Inactives ─────────────────────────────────────────────────────
                 "n_ic_total": n_ic_total,
                 "ratio_ic_recent": ratio_ic_recent,
                 "amp_recent_mean": amp_recent_mean,
@@ -401,17 +473,17 @@ if __name__ == "__main__":
     print(f"Features inactives ({len(INACTIVE_FEATURES)}) : {INACTIVE_FEATURES}")
     print("\nStatistiques durée (minutes) :")
     print(features["duration"].describe().round(1))
-    print("\nAperçu des nouvelles features (risque de reprise) :")
+    print("\nAperçu des nouvelles features (azimuth + maxis) :")
     new_cols = [
         "duration",
-        "n_bursts",
-        "pause_max",
-        "resume_risk",
-        "long_pause_count",
-        "pause_cv",
-        "pause_since_peak",
-        "inter_time_last3",
-        "dist_last_vs_mean",
+        "azimuth_last",
+        "azimuth_spread",
+        "azimuth_trend",
+        "azimuth_last_vs_mean",
+        "dist_min_adjusted",
+        "dist_last_adjusted",
+        "maxis_mean",
+        "maxis_last",
     ]
     print(features[new_cols].describe().round(3))
 

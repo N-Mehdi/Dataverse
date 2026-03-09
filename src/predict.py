@@ -36,13 +36,13 @@ from features import ACTIVE_FEATURES
 
 # Seuils optimisés par aéroport (issus de optimize_threshold.py, plafond 15%)
 SEUILS_PAR_AIRPORT = {
-    "Ajaccio": 0.84,
-    "Bastia": 0.73,
-    "Biarritz": 0.77,
-    "Nantes": 0.74,
+    "Ajaccio": 0.72,
+    "Bastia": 0.72,
+    "Biarritz": 0.73,
+    "Nantes": 0.75,
     "Pise": 0.73,
 }
-SEUIL_DEFAUT = 0.77  # fallback si aéroport inconnu
+SEUIL_DEFAUT = 0.73  # fallback si aéroport inconnu
 
 
 # ---------------------------------------------------------------------------
