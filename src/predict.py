@@ -34,6 +34,16 @@ import sys
 sys.path.append(str(Path(__file__).parent))
 from features import ACTIVE_FEATURES
 
+# Seuils optimisés par aéroport (issus de optimize_threshold.py, plafond 15%)
+SEUILS_PAR_AIRPORT = {
+    "Ajaccio": 0.84,
+    "Bastia": 0.73,
+    "Biarritz": 0.77,
+    "Nantes": 0.74,
+    "Pise": 0.73,
+}
+SEUIL_DEFAUT = 0.77  # fallback si aéroport inconnu
+
 
 # ---------------------------------------------------------------------------
 # Classe principale
@@ -50,7 +60,7 @@ class Predictor:
     seuil      : probabilité minimale pour recommander la levée d'alerte
     """
 
-    def __init__(self, model_path: str, seuil: float = 0.80):
+    def __init__(self, model_path: str, seuil: float = SEUIL_DEFAUT):
         checkpoint = joblib.load(model_path)
         self.model = checkpoint["model"]
         self.scaler = checkpoint["scaler"]
@@ -133,7 +143,6 @@ class Predictor:
             t_lever_abs = float(times_abs[idx_lever])
         else:
             t_lever_abs = float(t_max_abs)  # pas atteint dans l'horizon
-
         # Temps relatif avant levée depuis maintenant
         t_lever_rel = max(0.0, t_lever_abs - t_now)
 
@@ -192,9 +201,9 @@ class Predictor:
         Graphique de la courbe de survie conditionnelle.
 
         Axe X = temps depuis maintenant (t_rel).
-        Ligne orange  = maintenant (x=0).
-        Ligne rouge   = baseline 30 min (x = 30 - t_now, si future).
-        Ligne verte   = temps prédit de levée par le modèle.
+        Ligne orange   = maintenant (x=0).
+        Ligne rouge    = baseline 30 min (x = 30 - t_now, si future).
+        Ligne verte    = temps prédit de levée par le modèle.
         Ligne violette = fin réelle (si true_duration fournie).
         """
         df = result["survival_curve"]
@@ -243,7 +252,6 @@ class Predictor:
                 label=f"Baseline 30 min (dans {t_baseline_rel:.0f} min)",
             )
         else:
-            # Baseline déjà passée : on la marque à 0 avec un label différent
             ax.axvline(
                 x=0,
                 color="red",
@@ -332,7 +340,11 @@ if __name__ == "__main__":
     print(f"  Durée réelle : {duration:.1f} min  (baseline lève à 30 min)")
 
     features_dict = {col: sample[col] for col in ACTIVE_FEATURES}
-    predictor = Predictor("models/rsf_model.pkl", seuil=0.80)
+
+    # Seuil optimisé pour cet aéroport
+    seuil = SEUILS_PAR_AIRPORT.get(airport, SEUIL_DEFAUT)
+    print(f"  Seuil utilisé : {seuil:.0%} (optimisé pour {airport})")
+    predictor = Predictor("models/rsf_model.pkl", seuil=seuil)
 
     print(f"\n── Simulation minute par minute ────────────────────────────────────")
     print(
@@ -375,9 +387,10 @@ if __name__ == "__main__":
 
     for _, row in df.sample(50, random_state=0).iterrows():
         fd = {col: row[col] for col in ACTIVE_FEATURES}
-        r = predictor.predict(fd, time_since_last_cg=0)
+        s = SEUILS_PAR_AIRPORT.get(row["airport"], SEUIL_DEFAUT)
+        p = Predictor("models/rsf_model.pkl", seuil=s)
+        r = p.predict(fd, time_since_last_cg=0)
         gains.append(r["gain_vs_baseline"])
-        # Faux all-clear = modèle lève avant la vraie fin d'alerte
         if r["t_lever_abs"] < row["duration"]:
             faux_allclear += 1
 

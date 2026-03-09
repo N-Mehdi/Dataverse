@@ -186,7 +186,7 @@ def fit_rsf(train: pd.DataFrame, test: pd.DataFrame, n_estimators: int = 100):
 
     # Importance par permutation (feature_importances_ non dispo dans sksurv)
     perm = permutation_importance(
-        rsf, X_test, y_test, n_repeats=5, random_state=42, n_jobs=-1
+        rsf, X_test, y_test, n_repeats=5, random_state=42, n_jobs=1
     )
     importances = pd.Series(perm.importances_mean, index=FEATURE_COLS)
     print("\nImportance des features (permutation) :")

@@ -6,6 +6,8 @@ evaluate.py
 Pour chaque alerte : calcule le temps de levée prédit, le compare à la
 baseline 30 min, mesure le gain et détecte les faux all-clear.
 
+Utilise les seuils optimisés par aéroport (voir optimize_threshold.py).
+
 Usage :
     python src/evaluate.py data/features.parquet
 """
@@ -16,7 +18,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.patches import Patch
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
@@ -27,7 +28,16 @@ from features import ACTIVE_FEATURES
 # Config
 # ---------------------------------------------------------------------------
 
-SEUIL = 0.80
+# Seuils optimisés par aéroport (issus de optimize_threshold.py, plafond 15%)
+SEUILS_PAR_AIRPORT = {
+    "Ajaccio": 0.84,
+    "Bastia": 0.73,
+    "Biarritz": 0.77,
+    "Nantes": 0.74,
+    "Pise": 0.73,
+}
+SEUIL_DEFAUT = 0.77  # fallback si aéroport inconnu
+
 TEST_SIZE = 0.20
 RANDOM_SEED = 42
 
@@ -41,7 +51,6 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
 
     df = pd.read_parquet(features_path)
 
-    # Même split que model.py — train_test_split stratifié par aéroport
     from sklearn.model_selection import train_test_split
 
     _, df_test = train_test_split(
@@ -52,23 +61,25 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
     for a, n in sorted(airport_counts.items()):
         print(f"  {a:<12} : {n}")
 
-    predictor = Predictor(model_path, seuil=SEUIL)
-
     # ── Calcul des métriques par alerte ─────────────────────────────────────
     records = []
     for _, row in df_test.iterrows():
+        airport = row["airport"]
+        seuil = SEUILS_PAR_AIRPORT.get(airport, SEUIL_DEFAUT)
+        predictor = Predictor(model_path, seuil=seuil)
+
         fd = {col: row[col] for col in ACTIVE_FEATURES}
         duration = row["duration"]
-        airport = row["airport"]
 
-        r = predictor.predict(fd, time_since_last_cg=0)
+        r = predictor.predict(fd, time_since_last_cg=0, horizon=90)
 
         records.append(
             {
                 "airport": airport,
                 "duration": duration,
+                "seuil": seuil,
                 "t_lever_abs": r["t_lever_abs"],
-                "gain": r["gain_vs_baseline"],  # 30 - t_lever
+                "gain": r["gain_vs_baseline"],
                 "faux_allclear": r["t_lever_abs"] < duration,
             }
         )
@@ -92,9 +103,17 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
     print(
         f"  Faux all-clear                 : {n_faux}/{len(results)}  ({n_faux / len(results):.0%})"
     )
+    n_fallback = (results["t_lever_abs"] == 30.0).sum()
+    print(f"  Fallback 30 min utilisé : {n_fallback}/{len(results)}")
     print(f"  Durée réelle moyenne           : {results['duration'].mean():.1f} min")
     print(f"  t_lever moyen (modèle)         : {results['t_lever_abs'].mean():.1f} min")
     print(f"  t_lever baseline               : 30.0 min (fixe)")
+
+    print("\n" + "─" * 60)
+    print("  SEUILS UTILISÉS PAR AÉROPORT")
+    print("─" * 60)
+    for airport, seuil in sorted(SEUILS_PAR_AIRPORT.items()):
+        print(f"  {airport:<12} : {seuil:.0%}")
 
     # Stats par aéroport
     print("\n" + "─" * 60)
@@ -206,7 +225,7 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
     ax3.axhline(
         y=0, color="red", linewidth=1, linestyle="--", alpha=0.7, label="Baseline = 0"
     )
-    ax3.set_title("Distribution du gain par aéroport")
+    ax3.set_title("Distribution du gain par aéroport\n(seuils optimisés)")
     ax3.set_xlabel("Aéroport")
     ax3.set_ylabel("Gain (minutes)")
     ax3.tick_params(axis="x", rotation=15)
@@ -214,64 +233,43 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
     ax3.grid(alpha=0.3, axis="y")
 
     # ── 4. Trade-off gain vs faux all-clear selon le seuil ───────────────────
-    # Optimisation : on calcule les courbes de survie UNE SEULE FOIS
-    # puis on fait varier le seuil sans retoucher au modèle
-    ax4 = fig.add_subplot(gs[1, 1])
-    print("Calcul du trade-off (une passe sur les données)...")
-
-    TIMES_ABS = np.arange(0, 91, 1, dtype=float)  # horizon 90 min
-
-    # Charger le modèle brut pour prédire en batch
     checkpoint = joblib.load(model_path)
     raw_model = checkpoint["model"]
     raw_scaler = checkpoint["scaler"]
     model_type = type(raw_model).__name__
 
-    # Construire la matrice X_test
+    TIMES_ABS = np.arange(0, 91, 1, dtype=float)
     X_test = df_test[ACTIVE_FEATURES].values
     if raw_scaler is not None:
         X_test = raw_scaler.transform(X_test)
 
-    # Prédire toutes les courbes de survie en batch
-    print(f"  Prédiction batch sur {len(df_test)} alertes...")
+    print("Calcul du trade-off (une passe sur les données)...")
     if model_type == "RandomSurvivalForest":
         sf_funcs = raw_model.predict_survival_function(X_test)
-        # Interpoler chaque courbe sur TIMES_ABS
         S_all = np.array(
             [np.interp(TIMES_ABS, sf.x, sf(sf.x), right=0.0) for sf in sf_funcs]
-        )  # shape (n_alertes, len(TIMES_ABS))
+        )
     else:
-        # Cox — predict_survival_function retourne un DataFrame
         X_df = df_test[ACTIVE_FEATURES]
         sf_df = raw_model.predict_survival_function(X_df, times=TIMES_ABS)
-        S_all = sf_df.values.T  # shape (n_alertes, len(TIMES_ABS))
+        S_all = sf_df.values.T
 
     durations = df_test["duration"].values
-
-    # Pour chaque seuil, calculer gain et faux all-clear sans retoucher au modèle
     seuils_range = np.arange(0.50, 0.98, 0.02)
     gains_list, faux_list = [], []
 
     for s in seuils_range:
-        # t_lever_abs = premier t où 1 - S(t) >= s
-        prob_end_all = 1.0 - S_all  # shape (n_alertes, len(TIMES_ABS))
-        # Pour chaque alerte : premier index où prob_end >= s
+        prob_end_all = 1.0 - S_all
         idx_levers = np.argmax(prob_end_all >= s, axis=1)
-        # argmax retourne 0 si jamais atteint → on corrige
         never_reached = prob_end_all[:, -1] < s
         idx_levers[never_reached] = len(TIMES_ABS) - 1
         t_levers = TIMES_ABS[idx_levers]
+        gains_list.append((30.0 - t_levers).mean())
+        faux_list.append((t_levers < durations).mean())
 
-        gains_s = 30.0 - t_levers
-        faux_s = t_levers < durations
-        gains_list.append(gains_s.mean())
-        faux_list.append(faux_s.mean())
-
-    print("  Trade-off calculé.")
-
+    ax4 = fig.add_subplot(gs[1, 1])
     ax4.plot(faux_list, gains_list, "o-", color="steelblue", markersize=5)
 
-    # Annoter seuils clés
     for i, s in enumerate(seuils_range):
         if any(abs(s - ref) < 0.02 for ref in [0.60, 0.70, 0.80, 0.90]):
             ax4.annotate(
@@ -282,15 +280,26 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
                 fontsize=8,
             )
 
-    # Point seuil actuel
-    idx_cur = np.argmin(np.abs(seuils_range - SEUIL))
+    # Point seuil global
+    idx_glob = np.argmin(np.abs(seuils_range - 0.80))
     ax4.scatter(
-        [faux_list[idx_cur]],
-        [gains_list[idx_cur]],
+        [faux_list[idx_glob]],
+        [gains_list[idx_glob]],
         color="red",
         s=80,
         zorder=5,
-        label=f"Seuil actuel ({SEUIL:.0%})",
+        label="Seuil global (80%)",
+    )
+
+    # Point gain moyen avec seuils optimisés
+    ax4.scatter(
+        [results["faux_allclear"].mean()],
+        [results["gain"].mean()],
+        color="green",
+        s=100,
+        zorder=5,
+        marker="*",
+        label=f"Seuils optimisés ({results['gain'].mean():+.1f} min, {results['faux_allclear'].mean():.0%})",
     )
 
     ax4.axhline(y=0, color="gray", linewidth=0.8, linestyle="--", alpha=0.6)
@@ -312,7 +321,7 @@ def evaluate(features_path: str, model_path: str = "models/rsf_model.pkl"):
     )
 
     save_path = "outputs/evaluation.png"
-    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(save_path).parent.mkdir(exist_ok=True)
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     print(f"\nGraphique sauvegardé : {save_path}")
     plt.close("all")
