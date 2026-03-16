@@ -477,7 +477,7 @@ with tab1:
         fontsize=9,
     )
 
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig)
     plt.close()
 
     # ── Détails du profil ───────────────────────────────────────────────────
@@ -544,7 +544,7 @@ with tab2:
         ax2.legend(
             fontsize=7, facecolor="#0d1529", edgecolor="#1e293b", labelcolor="#94a3b8"
         )
-        st.pyplot(fig2, use_container_width=True)
+        st.pyplot(fig2)
         plt.close()
 
     with col2:
@@ -587,7 +587,7 @@ with tab2:
         ax3.legend(
             fontsize=8, facecolor="#0d1529", edgecolor="#1e293b", labelcolor="#94a3b8"
         )
-        st.pyplot(fig3, use_container_width=True)
+        st.pyplot(fig3)
         plt.close()
 
     # Stats par aéroport
@@ -611,7 +611,6 @@ with tab2:
     df_stats = pd.DataFrame(stats_data)
     st.dataframe(
         df_stats,
-        hide_index=True,
         use_container_width=True,
     )
 
@@ -640,7 +639,7 @@ with tab3:
             "Faux all-clear (%)": ["0%", "—", "3.1%", "2.8%"],
         }
         df_perf = pd.DataFrame(perf_data)
-        st.dataframe(df_perf, hide_index=True, use_container_width=True)
+        st.dataframe(df_perf, use_container_width=True)
 
         st.markdown("")
         st.info(
@@ -677,7 +676,7 @@ with tab3:
         ax4.fill_betweenx([0, 18], 0, 5, alpha=0.04, color="#10b981")
         ax4.text(0.2, 16, "← Meilleure zone", color="#10b981", fontsize=8, alpha=0.6)
 
-        st.pyplot(fig4, use_container_width=True)
+        st.pyplot(fig4)
         plt.close()
 
     # Impact économique
