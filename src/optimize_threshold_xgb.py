@@ -11,6 +11,12 @@ Logique de décision recalibrée :
 
 Faux all-clear : on lève l'alerte à t_lever mais y=1 à ce snapshot
   (= un éclair CG survient dans les 30 min suivant t_lever)
+
+Orages longs :
+  - Si elapsed_time >= LONG_ALERT_MIN au moment du snapshot de silence,
+    on applique SEUIL_LONG (quasi-zéro) → on ne lève presque jamais.
+  - Objectif : recall 100% sur les orages longs, quitte à perdre du gain
+    sur les orages courts.
 """
 
 import pandas as pd
@@ -28,6 +34,10 @@ SEUIL_MAX = 0.95
 SEUIL_STEP = 0.01
 BASELINE_MIN = 30  # minutes après le dernier éclair — règle fixe actuelle
 
+# ── Paramètres orages longs ───────────────────────────────────────────────────
+LONG_ALERT_MIN = 60  # durée minimale (elapsed_time) pour considérer un orage "long"
+SEUIL_LONG = 0.0  # zéro strict → proba toujours >= 0 → levée IMPOSSIBLE pour les longs
+
 
 def predict_lever(
     alert_snapshots: pd.DataFrame,
@@ -42,17 +52,26 @@ def predict_lever(
     On cherche le PREMIER snapshot après le dernier éclair (time_since_last_cg > 0)
     où P(éclair) < seuil.
 
+    Orages longs :
+      - Si elapsed_time max des snapshots de silence >= LONG_ALERT_MIN
+        → baseline forcée, on ne lève JAMAIS en avance (0% faux all-clear garanti)
+      - Sinon → seuil normal passé en paramètre
+
     Si aucun snapshot ne passe sous le seuil → on lève à la baseline (30 min).
     """
     # On ne considère que les snapshots APRÈS le dernier éclair
-    silence = alert_snapshots[alert_snapshots["time_since_last_cg"] > 0].copy()
-    silence_probas = probas[alert_snapshots["time_since_last_cg"] > 0]
+    mask_silence = alert_snapshots["time_since_last_cg"] > 0
+    silence = alert_snapshots[mask_silence].copy()
+    silence_probas = probas[mask_silence]
 
     if len(silence) == 0:
-        # Pas de snapshot de silence → baseline
         return BASELINE_MIN, 0
 
     silence = silence.reset_index(drop=True)
+
+    # Orage long : baseline forcée → jamais de levée anticipée
+    if float(silence["elapsed_time"].max()) >= LONG_ALERT_MIN:
+        return BASELINE_MIN, 0
 
     for i in range(len(silence)):
         if silence_probas[i] < seuil:
@@ -78,8 +97,9 @@ def evaluate_threshold(test: pd.DataFrame, probas: np.ndarray, seuil: float):
     gains = []
     faux = []
 
-    for (airport, alert_id), grp in test.groupby(["airport", "airport_alert_id"]):
-        # Trier par time_since_last_cg pour avoir l'ordre chronologique de silence
+    for (airport, alert_id), grp in test.groupby(
+        ["airport", "airport_alert_id"], dropna=False
+    ):
         grp_sorted = grp.sort_values("time_since_last_cg").reset_index(drop=True)
         idx = grp.sort_values("time_since_last_cg").index
         p = probas[test.index.get_indexer(idx)]
@@ -94,6 +114,11 @@ def evaluate_threshold(test: pd.DataFrame, probas: np.ndarray, seuil: float):
 
 
 def optimize_airport(airport: str, test: pd.DataFrame, probas: np.ndarray) -> tuple:
+    """
+    Optimise uniquement le seuil des orages COURTS pour cet aéroport.
+    Le seuil long (SEUIL_LONG) est fixe et s'applique automatiquement
+    dans predict_lever pour les orages longs.
+    """
     test_ap = test[test["airport"] == airport]
     if len(test_ap) == 0:
         return 0.5, 0.0, 0.0
@@ -105,6 +130,7 @@ def optimize_airport(airport: str, test: pd.DataFrame, probas: np.ndarray) -> tu
     best_faux = 0.0
 
     for s in seuils:
+        # predict_lever applique automatiquement SEUIL_LONG pour les orages longs
         gain, faux = evaluate_threshold(test_ap, probas, s)
         score = gain - PENALITE * faux / 100
         if score > best_score:
@@ -136,7 +162,16 @@ if __name__ == "__main__":
 
     print("\n" + "─" * 65)
     print(f"  Optimisation (pénalité faux all-clear : {PENALITE} min / 1%)")
+    print(
+        f"  Orages longs : elapsed_time >= {LONG_ALERT_MIN} min → seuil {SEUIL_LONG:.0%}"
+    )
     print("─" * 65)
+
+    # Stats orages longs vs courts dans le test
+    n_long = test[test["elapsed_time"] >= LONG_ALERT_MIN]["airport_alert_id"].nunique()
+    n_court = test[test["elapsed_time"] < LONG_ALERT_MIN]["airport_alert_id"].nunique()
+    print(f"\n  Alertes longues (>= {LONG_ALERT_MIN} min) : {n_long}")
+    print(f"  Alertes courtes (<  {LONG_ALERT_MIN} min) : {n_court}")
 
     seuils_par_airport = {}
 
@@ -163,7 +198,9 @@ if __name__ == "__main__":
 
     # Résultats globaux avec seuils optimisés
     gains_opt, faux_opt_list = [], []
-    for (airport, alert_id), grp in test.groupby(["airport", "airport_alert_id"]):
+    for (airport, alert_id), grp in test.groupby(
+        ["airport", "airport_alert_id"], dropna=False
+    ):
         seuil = seuils_par_airport.get(airport, 0.5)
         grp_sorted = grp.sort_values("time_since_last_cg").reset_index(drop=True)
         idx = grp.sort_values("time_since_last_cg").index
@@ -192,9 +229,10 @@ if __name__ == "__main__":
         f"  Faux all-clear      {faux_g50:>10.0f}%              {100 * faux_opt_arr.mean():>4.0f}%"
     )
 
-    print("\n  Seuils optimaux par aéroport :")
+    print("\n  Seuils optimaux par aéroport (orages courts) :")
     for airport, seuil in sorted(seuils_par_airport.items()):
         print(f"    {airport:<12s} : {seuil * 100:.0f}%")
+    print(f"\n  Seuil orages longs (>= {LONG_ALERT_MIN} min) : {SEUIL_LONG:.0%} [fixe]")
 
     # Graphique trade-off par aéroport
     fig, axes = plt.subplots(1, len(airports), figsize=(4 * len(airports), 4))

@@ -23,8 +23,9 @@ import argparse
 from datetime import timezone
 
 from features_snapshot import compute_snapshot_features, FEATURE_COLS, HORIZON
+from optimize_threshold_xgb import LONG_ALERT_MIN, SEUIL_LONG
 
-# ── Seuils optimaux par aéroport ─────────────────────────────────────────────
+# ── Seuils optimaux par aéroport (orages courts) ─────────────────────────────
 SEUILS_PAR_AIRPORT = {
     "Ajaccio": 0.18,
     "Bastia": 0.10,
@@ -66,7 +67,9 @@ def predict(
         proba              : P(éclair CG dans les 30 prochaines minutes)
         decision           : "LEVER" ou "MAINTENIR"
         time_since_last_cg : minutes depuis le dernier éclair CG
+        elapsed_time       : durée totale de l'alerte en minutes
         seuil              : seuil utilisé pour cet aéroport
+        is_long_alert      : True si l'alerte est considérée longue
         features           : dict des features calculées
     """
     if model is None:
@@ -83,7 +86,9 @@ def predict(
             "proba": 1.0,
             "decision": "MAINTENIR",
             "time_since_last_cg": 0.0,
+            "elapsed_time": 0.0,
             "seuil": SEUILS_PAR_AIRPORT.get(airport, SEUIL_DEFAUT),
+            "is_long_alert": False,
             "features": {},
             "message": "Pas assez d'éclairs CG pour décider (< 2)",
         }
@@ -103,6 +108,7 @@ def predict(
         now = t_last_cg
 
     time_since_last_cg = (now - t_last_cg).total_seconds() / 60
+    elapsed_time = (now - t_alert_start).total_seconds() / 60
 
     # Calcul des features à l'instant now
     features = compute_snapshot_features(cg, now, t_alert_start, airport)
@@ -111,18 +117,29 @@ def predict(
     X = pd.DataFrame([features])[FEATURE_COLS]
     proba = float(model.predict_proba(X)[0, 1])
 
-    seuil = SEUILS_PAR_AIRPORT.get(airport, SEUIL_DEFAUT)
-    decision = "LEVER" if proba < seuil else "MAINTENIR"
+    # ── Seuil effectif ────────────────────────────────────────────────────────
+    # Orage long : elapsed_time >= LONG_ALERT_MIN → levée IMPOSSIBLE (baseline forcée)
+    is_long_alert = elapsed_time >= LONG_ALERT_MIN
+    if is_long_alert:
+        decision = "MAINTENIR"
+        seuil = SEUIL_LONG
+        seuil_label = f"0% [orage long >= {LONG_ALERT_MIN} min — levée impossible]"
+    else:
+        seuil = SEUILS_PAR_AIRPORT.get(airport, SEUIL_DEFAUT)
+        seuil_label = f"{seuil:.0%}"
+        decision = "LEVER" if proba < seuil else "MAINTENIR"
 
     return {
         "proba": proba,
         "decision": decision,
         "time_since_last_cg": time_since_last_cg,
+        "elapsed_time": elapsed_time,
         "seuil": seuil,
+        "is_long_alert": is_long_alert,
         "features": features,
         "message": (
             f"P(éclair dans {HORIZON} min) = {proba:.1%} "
-            f"{'<' if proba < seuil else '>='} seuil {seuil:.0%} "
+            f"{'<' if proba < seuil else '>='} seuil {seuil_label} "
             f"→ {decision}"
         ),
     }
@@ -168,9 +185,11 @@ def predict_sequence(
         rows.append(
             {
                 "t": t,
-                "elapsed_min": (t - t_start).total_seconds() / 60,
+                "elapsed_min": result["elapsed_time"],
                 "time_since_last_cg": result["time_since_last_cg"],
                 "proba": result["proba"],
+                "seuil": result["seuil"],
+                "is_long_alert": result["is_long_alert"],
                 "decision": result["decision"],
             }
         )
@@ -223,8 +242,9 @@ if __name__ == "__main__":
         lever = seq[seq["decision"] == "LEVER"]
         if len(lever) > 0:
             first = lever.iloc[0]
+            long_str = " [orage long]" if first["is_long_alert"] else ""
             print(
-                f"\n→ Première levée possible à t+{first['time_since_last_cg']:.1f} min après dernier éclair"
+                f"\n→ Première levée possible à t+{first['time_since_last_cg']:.1f} min après dernier éclair{long_str}"
             )
             print(f"  (soit {first['elapsed_min']:.1f} min après début d'alerte)")
         else:
@@ -240,9 +260,15 @@ if __name__ == "__main__":
 
         result = predict(df, args.airport, now, model=model)
 
+        long_str = (
+            f" ⚠ ORAGE LONG (>= {LONG_ALERT_MIN} min)"
+            if result["is_long_alert"]
+            else ""
+        )
         print(f"\n{'═' * 50}")
         print(f"  Aéroport              : {args.airport}")
         print(f"  Instant évalué        : {now}")
+        print(f"  Durée alerte          : {result['elapsed_time']:.1f} min{long_str}")
         print(
             f"  Dernier éclair CG     : {result['time_since_last_cg']:.1f} min avant now"
         )
