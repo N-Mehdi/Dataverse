@@ -262,13 +262,11 @@ def generate_snapshots(
             feats["y"] = y
             return feats
 
-        # ── PENDANT l'alerte ─────────────────────────────────────────────────
-        t_snap = t_start + pd.Timedelta(minutes=interval * 2)
-        while t_snap <= t_last_cg:
-            hist = grp[grp["date"] <= t_snap]
-            if len(hist) >= MIN_CG:
-                records.append(make_snapshot(t_snap, hist))
-            t_snap += pd.Timedelta(minutes=interval)
+        # ── PENDANT l'alerte ── NOUVEAU (un snapshot par éclair)
+        for i in range(MIN_CG, len(grp) + 1):
+            hist = grp.iloc[:i]
+            t_snap = hist["date"].max()
+            records.append(make_snapshot(t_snap, hist))    
 
         # ── APRÈS le dernier éclair (silence) ────────────────────────────────
         # time_since_last_cg croît ici → signal fort de fin d'orage
