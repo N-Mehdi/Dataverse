@@ -248,7 +248,7 @@ python make_dataset_variants.py
 
 ### Version A (avec time_since_* — fuite)
 ```bash
-python run_baseline_classifier.py output/silence_dataset.csv output/baseline_results_A
+python 2Amodels_roc_comparison.py output/silence_dataset.csv output/baseline_results_A
 ```
 
 ### Version B (sans time_since_*)
