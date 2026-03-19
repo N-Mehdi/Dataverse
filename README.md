@@ -228,3 +228,35 @@ C-index RSF            : 0.969
 - Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min) — le modèle se trompe sur les orages qui font des pauses avant de reprendre
 - Tester une **optimisation du seuil par aéroport** plutôt qu'un seuil global à 0.80
 - Explorer des **features de contexte météo** (saison, heure de la journée)
+
+
+
+
+# Commandes du pipeline
+
+## Étape 1 — Build dataset
+```bash
+python build_silence_dataset.py
+```
+
+## Étape 2 — Variantes B et C
+```bash
+python make_dataset_variants.py
+```
+
+## Étape 3 — Entraînement
+
+### Version A (avec time_since_* — fuite)
+```bash
+python run_baseline_classifier.py output/silence_dataset.csv output/baseline_results_A
+```
+
+### Version B (sans time_since_*)
+```bash
+python run_baseline_classifier.py output/silence_dataset_B.csv output/baseline_results_B
+```
+
+### Version C (propre — recommandée)
+```bash
+python run_baseline_classifier.py output/silence_dataset_C.csv output/baseline_results_C
+```
