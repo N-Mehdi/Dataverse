@@ -231,24 +231,24 @@ C-index RSF            : 0.969
 
 
 
-
+# Comment lancer les modèles(pour l'instant ignorez la version B et C)
 # Commandes du pipeline
 
 ## Étape 1 — Build dataset
 ```bash
-python build_silence_dataset.py
+python src/build_silence_dataset.py
 ```
 
 ## Étape 2 — Variantes B et C
 ```bash
-python make_dataset_variants.py
+python src/make_dataset_variants.py
 ```
 
 ## Étape 3 — Entraînement
 
 ### Version A (avec time_since_* — fuite)
 ```bash
-python 2Amodels_roc_comparison.py output/silence_dataset.csv output/baseline_results_A
+python src/2Amodels_roc_comparison.py output/silence_dataset.csv output/baseline_results_A
 ```
 
 ### Version B (sans time_since_*)
