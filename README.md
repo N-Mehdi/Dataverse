@@ -260,3 +260,105 @@ python run_baseline_classifier.py output/silence_dataset_B.csv output/baseline_r
 ```bash
 python run_baseline_classifier.py output/silence_dataset_C.csv output/baseline_results_C
 ```
+
+## Variables utilisées pour la prédiction
+
+### Features utilisées
+
+- **airport** : Aéroport concerné par l’alerte ; variable catégorielle de contexte.
+- **minutes_since_reference_cg** : Nombre de minutes écoulées depuis le CG inner de référence.
+- **elapsed_min** : Temps écoulé depuis le début de l’alerte.
+- **obs_elapsed_min** : Temps écoulé depuis le début de la fenêtre d’observation.
+- **time_since_last_event_min** : Temps depuis le dernier événement observé, tous types et zones confondus.
+- **time_since_last_cg_min** : Temps depuis le dernier éclair sol (CG).
+- **time_since_last_ic_min** : Temps depuis le dernier éclair intra-nuage (IC).
+- **time_since_last_inner_min** : Temps depuis le dernier événement observé dans la zone inner (< 20 km).
+- **time_since_last_cg_inner_min** : Temps depuis le dernier éclair sol observé dans la zone inner.
+- **last_event_type** : Type du dernier événement observé (`CG` ou `IC`).
+- **last_event_zone** : Zone du dernier événement observé (`inner` ou `outer`).
+- **last_event_amplitude** : Amplitude du dernier événement observé.
+- **last_event_dist** : Distance du dernier événement observé à l’aéroport.
+- **n_total** : Nombre total d’événements observés.
+- **n_cg** : Nombre total de CG observés.
+- **n_ic** : Nombre total de IC observés.
+- **n_inner** : Nombre total d’événements dans la zone inner.
+- **n_outer** : Nombre total d’événements hors zone inner.
+- **n_cg_inner** : Nombre total de CG dans la zone inner.
+- **n_cg_outer** : Nombre total de CG hors zone inner.
+- **n_ic_inner** : Nombre total de IC dans la zone inner.
+- **n_ic_outer** : Nombre total de IC hors zone inner.
+- **amp_abs_mean** : Moyenne de l’amplitude absolue des événements observés.
+- **amp_abs_max** : Maximum de l’amplitude absolue observée.
+- **dist_mean** : Distance moyenne des événements observés.
+- **dist_min** : Distance minimale observée.
+- **mean_interarrival_min** : Moyenne des temps entre événements successifs.
+- **median_interarrival_min** : Médiane des temps entre événements successifs.
+- **max_interarrival_min** : Maximum des temps inter-arrivées observés.
+- **current_silence_over_mean_interarrival** : Rapport entre le silence actuel et le temps inter-arrivées moyen.
+- **current_silence_over_median_interarrival** : Rapport entre le silence actuel et le temps inter-arrivées médian.
+- **current_silence_over_max_interarrival** : Rapport entre le silence actuel et le plus grand temps inter-arrivées observé.
+- **n_total_last_5m** : Nombre total d’événements sur les 5 dernières minutes.
+- **n_cg_inner_last_5m** : Nombre de CG inner sur les 5 dernières minutes.
+- **n_cg_outer_last_5m** : Nombre de CG outer sur les 5 dernières minutes.
+- **n_ic_inner_last_5m** : Nombre de IC inner sur les 5 dernières minutes.
+- **n_ic_outer_last_5m** : Nombre de IC outer sur les 5 dernières minutes.
+- **dist_mean_last_5m** : Distance moyenne des événements sur les 5 dernières minutes.
+- **dist_min_last_5m** : Distance minimale observée sur les 5 dernières minutes.
+- **amp_abs_mean_last_5m** : Amplitude absolue moyenne sur les 5 dernières minutes.
+- **n_total_last_10m** : Nombre total d’événements sur les 10 dernières minutes.
+- **n_cg_inner_last_10m** : Nombre de CG inner sur les 10 dernières minutes.
+- **n_cg_outer_last_10m** : Nombre de CG outer sur les 10 dernières minutes.
+- **n_ic_inner_last_10m** : Nombre de IC inner sur les 10 dernières minutes.
+- **n_ic_outer_last_10m** : Nombre de IC outer sur les 10 dernières minutes.
+- **dist_mean_last_10m** : Distance moyenne des événements sur les 10 dernières minutes.
+- **dist_min_last_10m** : Distance minimale observée sur les 10 dernières minutes.
+- **amp_abs_mean_last_10m** : Amplitude absolue moyenne sur les 10 dernières minutes.
+- **n_total_last_20m** : Nombre total d’événements sur les 20 dernières minutes.
+- **n_cg_inner_last_20m** : Nombre de CG inner sur les 20 dernières minutes.
+- **n_cg_outer_last_20m** : Nombre de CG outer sur les 20 dernières minutes.
+- **n_ic_inner_last_20m** : Nombre de IC inner sur les 20 dernières minutes.
+- **n_ic_outer_last_20m** : Nombre de IC outer sur les 20 dernières minutes.
+- **dist_mean_last_20m** : Distance moyenne des événements sur les 20 dernières minutes.
+- **dist_min_last_20m** : Distance minimale observée sur les 20 dernières minutes.
+- **amp_abs_mean_last_20m** : Amplitude absolue moyenne sur les 20 dernières minutes.
+
+### Colonnes non utilisées pour la prédiction
+
+- **airport_alert_id** : Identifiant technique de l’alerte au sein de l’aéroport.
+- **alert_group** : Identifiant de groupe utilisé pour les splits train/test et la validation croisée groupée.
+- **obs_start** : Début de la fenêtre d’observation.
+- **alert_start** : Instant de début de l’alerte.
+- **decision_time** : Instant exact où les features sont calculées.
+- **cg_reference_index** : Index du CG inner de référence dans la séquence de l’alerte.
+- **y** : Variable cible ; vaut 1 s’il n’y a plus de CG inner après l’instant considéré, 0 sinon.
+
+
+### Features à ajouter
+
+- **n_total_since_last_cg_inner** : Nombre total d’événements observés depuis le dernier CG dans la zone inner jusqu’à l’instant de décision.
+- **n_ic_since_last_cg_inner** : Nombre d’éclairs intra-nuage (IC) observés depuis le dernier CG inner.
+- **n_cg_outer_since_last_cg_inner** : Nombre de CG observés dans la zone outer depuis le dernier CG inner.
+- **n_ic_outer_since_last_cg_inner** : Nombre de IC observés dans la zone outer depuis le dernier CG inner.
+- **dist_mean_since_last_cg_inner** : Distance moyenne des événements observés depuis le dernier CG inner.
+- **dist_min_since_last_cg_inner** : Distance minimale observée depuis le dernier CG inner.
+- **amp_abs_mean_since_last_cg_inner** : Amplitude absolue moyenne des événements observés depuis le dernier CG inner.
+
+- **delta_n_total_5m_vs_prev_5m** : Différence entre le nombre total d’événements sur les 5 dernières minutes et le nombre total d’événements sur les 5 minutes précédentes.
+- **delta_n_cg_inner_5m_vs_prev_5m** : Différence entre le nombre de CG inner sur les 5 dernières minutes et celui des 5 minutes précédentes.
+- **delta_n_cg_outer_5m_vs_prev_5m** : Différence entre le nombre de CG outer sur les 5 dernières minutes et celui des 5 minutes précédentes.
+- **delta_n_ic_outer_5m_vs_prev_5m** : Différence entre le nombre de IC outer sur les 5 dernières minutes et celui des 5 minutes précédentes.
+- **delta_dist_mean_5m_vs_prev_5m** : Différence entre la distance moyenne observée sur les 5 dernières minutes et celle observée sur les 5 minutes précédentes.
+- **delta_dist_min_5m_vs_prev_5m** : Différence entre la distance minimale observée sur les 5 dernières minutes et celle observée sur les 5 minutes précédentes.
+
+- **n_cg_0_10_last_10m** : Nombre de CG observés à moins de 10 km de l’aéroport sur les 10 dernières minutes.
+- **n_cg_10_20_last_10m** : Nombre de CG observés entre 10 et 20 km de l’aéroport sur les 10 dernières minutes.
+- **n_cg_20_30_last_10m** : Nombre de CG observés entre 20 et 30 km de l’aéroport sur les 10 dernières minutes.
+
+- **share_inner_last_10m** : Proportion d’événements observés dans la zone inner parmi l’ensemble des événements observés sur les 10 dernières minutes.
+
+### Variables à retirer potentiellement pour limiter la redondance
+
+- **minutes_since_reference_cg** : Nombre de minutes écoulées depuis le CG inner de référence ; variable redondante avec `time_since_last_cg_inner_min` dans le schéma actuel de construction des instants de décision.
+- **obs_elapsed_min** : Temps écoulé depuis le début de la fenêtre d’observation ; variable redondante avec `elapsed_min` puisque la fenêtre d’observation commence toujours 10 minutes avant le début de l’alerte.
+- **max_interarrival_min** : Plus grand temps inter-arrivées observé ; variable potentiellement bruitée et moins stable que la moyenne ou la médiane des temps inter-arrivées.
+- **current_silence_over_max_interarrival** : Rapport entre le silence actuel et le plus grand temps inter-arrivées observé ; variable potentiellement instable car fondée sur une quantité extrême.
