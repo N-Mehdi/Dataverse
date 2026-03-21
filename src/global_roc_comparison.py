@@ -1,9 +1,10 @@
+#script qui utilise directement get_scores()
 import sys
 from pathlib import Path
+import itertools
 import numpy as np
 import pandas as pd
 
-from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
@@ -15,7 +16,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier
-from sklearn.svm import SVC
+
+from xgboost import XGBClassifier
 
 
 TARGET_COL = "y"
@@ -29,7 +31,7 @@ NON_FEATURE_COLS = {
     "alert_start",
     "decision_time",
     "cg_reference_index",
-    "minutes_since_reference_cg",
+    "minutes_since_reference_cg",  # exclue ici
     "y",
 }
 
@@ -81,7 +83,6 @@ def make_preprocessor(numeric_cols, categorical_cols, scale_numeric=True):
     numeric_steps = [("imputer", SimpleImputer(strategy="median"))]
     if scale_numeric:
         numeric_steps.append(("scaler", StandardScaler()))
-
     numeric_pipe = Pipeline(numeric_steps)
 
     categorical_pipe = Pipeline([
@@ -97,105 +98,196 @@ def make_preprocessor(numeric_cols, categorical_cols, scale_numeric=True):
     return preprocessor
 
 
-def build_models(numeric_cols, categorical_cols):
-    models = {}
+def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
+    if model_name in {"logistic", "knn"}:
+        preproc = make_preprocessor(numeric_cols, categorical_cols, scale_numeric=True)
+    else:
+        preproc = make_preprocessor(numeric_cols, categorical_cols, scale_numeric=False)
 
-    # Modèles sensibles à l'échelle
-    preproc_scaled = make_preprocessor(numeric_cols, categorical_cols, scale_numeric=True)
-
-    models["logistic"] = Pipeline([
-        ("preprocess", preproc_scaled),
-        ("model", LogisticRegression(
+    if model_name == "logistic":
+        model = LogisticRegression(
             max_iter=2000,
             class_weight="balanced",
-            solver="liblinear",
+            solver=params["solver"],
+            penalty=params["penalty"],
+            C=params["C"],
             random_state=42,
-        )),
-    ])
+        )
 
-    models["knn"] = Pipeline([
-        ("preprocess", preproc_scaled),
-        ("model", KNeighborsClassifier(
-            n_neighbors=25,
-            weights="distance",
-            p=2,
-        )),
-    ])
+    elif model_name == "knn":
+        model = KNeighborsClassifier(
+            n_neighbors=params["n_neighbors"],
+            weights=params["weights"],
+            p=params["p"],
+        )
 
-    models["svm_rbf"] = Pipeline([
-        ("preprocess", preproc_scaled),
-        ("model", SVC(
-            kernel="rbf",
-            C=1.0,
-            gamma="scale",
-            probability=True,
+    elif model_name == "cart":
+        model = DecisionTreeClassifier(
+            max_depth=params["max_depth"],
+            min_samples_leaf=params["min_samples_leaf"],
             class_weight="balanced",
             random_state=42,
-        )),
-    ])
+        )
 
-    # Modèles à arbres : pas besoin de standardisation
-    preproc_tree = make_preprocessor(numeric_cols, categorical_cols, scale_numeric=False)
-
-    models["cart"] = Pipeline([
-        ("preprocess", preproc_tree),
-        ("model", DecisionTreeClassifier(
-            max_depth=6,
-            min_samples_leaf=20,
-            class_weight="balanced",
-            random_state=42,
-        )),
-    ])
-
-    models["random_forest"] = Pipeline([
-        ("preprocess", preproc_tree),
-        ("model", RandomForestClassifier(
-            n_estimators=400,
-            max_depth=None,
-            min_samples_leaf=10,
-            max_features="sqrt",
+    elif model_name == "random_forest":
+        model = RandomForestClassifier(
+            n_estimators=params["n_estimators"],
+            max_depth=params["max_depth"],
+            min_samples_leaf=params["min_samples_leaf"],
+            max_features=params["max_features"],
             class_weight="balanced_subsample",
             random_state=42,
             n_jobs=-1,
-        )),
-    ])
+        )
 
-    bagging_base = DecisionTreeClassifier(
-        max_depth=None,
-        min_samples_leaf=5,
-        random_state=42,
-    )
-
-    models["bagging_tree"] = Pipeline([
-        ("preprocess", preproc_tree),
-        ("model", BaggingClassifier(
-            estimator=bagging_base,
-            n_estimators=300,
-            max_samples=1.0,
-            max_features=1.0,
+    elif model_name == "bagging_tree":
+        base_tree = DecisionTreeClassifier(
+            max_depth=params["base_max_depth"],
+            min_samples_leaf=params["base_min_samples_leaf"],
+            random_state=42,
+        )
+        model = BaggingClassifier(
+            estimator=base_tree,
+            n_estimators=params["n_estimators"],
+            max_samples=params["max_samples"],
+            max_features=params["max_features"],
             bootstrap=True,
             random_state=42,
             n_jobs=-1,
-        )),
-    ])
+        )
 
-    boost_base = DecisionTreeClassifier(
-        max_depth=2,
-        min_samples_leaf=10,
-        random_state=42,
-    )
-
-    models["adaboost_tree"] = Pipeline([
-        ("preprocess", preproc_tree),
-        ("model", AdaBoostClassifier(
-            estimator=boost_base,
-            n_estimators=300,
-            learning_rate=0.05,
+    elif model_name == "adaboost_tree":
+        base_tree = DecisionTreeClassifier(
+            max_depth=params["base_max_depth"],
+            min_samples_leaf=params["base_min_samples_leaf"],
             random_state=42,
-        )),
+        )
+        model = AdaBoostClassifier(
+            estimator=base_tree,
+            n_estimators=params["n_estimators"],
+            learning_rate=params["learning_rate"],
+            random_state=42,
+        )
+
+    elif model_name == "xgboost":
+        model = XGBClassifier(
+            n_estimators=params["n_estimators"],
+            max_depth=params["max_depth"],
+            learning_rate=params["learning_rate"],
+            subsample=params["subsample"],
+            colsample_bytree=params["colsample_bytree"],
+            min_child_weight=params["min_child_weight"],
+            reg_lambda=params["reg_lambda"],
+            objective="binary:logistic",
+            eval_metric="logloss",
+            random_state=42,
+            n_jobs=-1,
+        )
+
+    else:
+        raise ValueError(f"Modèle inconnu : {model_name}")
+
+    return Pipeline([
+        ("preprocess", preproc),
+        ("model", model),
     ])
 
-    return models
+
+def parameter_grid():
+    return {
+        "logistic": [
+            {"solver": "liblinear", "penalty": "l1", "C": c}
+            for c in [0.01, 0.1, 1.0, 10.0]
+        ] + [
+            {"solver": "liblinear", "penalty": "l2", "C": c}
+            for c in [0.01, 0.1, 1.0, 10.0]
+        ],
+
+        "knn": [
+            {"n_neighbors": k, "weights": w, "p": p}
+            for k, w, p in itertools.product(
+                [5, 15, 25, 50],
+                ["uniform", "distance"],
+                [1, 2],
+            )
+        ],
+
+        "cart": [
+            {"max_depth": d, "min_samples_leaf": leaf}
+            for d, leaf in itertools.product(
+                [3, 5, 7, 10, None],
+                [5, 10, 20, 50],
+            )
+        ],
+
+        "random_forest": [
+            {
+                "n_estimators": n_est,
+                "max_depth": depth,
+                "min_samples_leaf": leaf,
+                "max_features": mf,
+            }
+            for n_est, depth, leaf, mf in itertools.product(
+                [200, 400],
+                [None, 10],
+                [5, 10, 20],
+                ["sqrt", 0.5],
+            )
+        ],
+
+        "bagging_tree": [
+            {
+                "base_max_depth": depth,
+                "base_min_samples_leaf": leaf,
+                "n_estimators": n_est,
+                "max_samples": ms,
+                "max_features": mf,
+            }
+            for depth, leaf, n_est, ms, mf in itertools.product(
+                [None, 10],
+                [5, 10, 20],
+                [100, 300],
+                [0.8, 1.0],
+                [0.8, 1.0],
+            )
+        ],
+
+        "adaboost_tree": [
+            {
+                "base_max_depth": depth,
+                "base_min_samples_leaf": leaf,
+                "n_estimators": n_est,
+                "learning_rate": lr,
+            }
+            for depth, leaf, n_est, lr in itertools.product(
+                [1, 2, 3],
+                [5, 10, 20],
+                [100, 300],
+                [0.01, 0.05, 0.1],
+            )
+        ],
+
+        "xgboost": [
+            {
+                "n_estimators": n_est,
+                "max_depth": depth,
+                "learning_rate": lr,
+                "subsample": subs,
+                "colsample_bytree": colsub,
+                "min_child_weight": mcw,
+                "reg_lambda": reg_lambda,
+            }
+            for n_est, depth, lr, subs, colsub, mcw, reg_lambda in itertools.product(
+                [100, 300],
+                [3, 5, 7],
+                [0.03, 0.1],
+                [0.8, 1.0],
+                [0.8, 1.0],
+                [1, 5],
+                [1.0, 5.0],
+            )
+        ],
+    }
 
 
 def get_scores(fitted_model, X):
@@ -236,8 +328,8 @@ def evaluate_predictions(y_true, y_score, threshold=0.5):
     }
 
 
-def cross_validate_grouped(train_df: pd.DataFrame, models: dict, n_splits: int = 5):
-    feature_cols, _, _ = build_feature_lists(train_df)
+def cross_val_score_params(train_df, model_name, params, n_splits=5):
+    feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
 
     X = train_df[feature_cols]
     y = train_df[TARGET_COL].astype(int).values
@@ -246,34 +338,77 @@ def cross_validate_grouped(train_df: pd.DataFrame, models: dict, n_splits: int =
     gkf = GroupKFold(n_splits=n_splits)
     rows = []
 
-    for model_name, pipe in models.items():
-        for fold, (tr_idx, va_idx) in enumerate(gkf.split(X, y, groups), start=1):
-            X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
-            y_tr, y_va = y[tr_idx], y[va_idx]
+    for fold, (tr_idx, va_idx) in enumerate(gkf.split(X, y, groups), start=1):
+        X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
+        y_tr, y_va = y[tr_idx], y[va_idx]
 
-            fitted = clone(pipe)
-            fitted.fit(X_tr, y_tr)
-            va_score = get_scores(fitted, X_va)
+        pipe = build_model_pipeline(model_name, params, numeric_cols, categorical_cols)
+        pipe.fit(X_tr, y_tr)
+        va_score = get_scores(pipe, X_va)
 
-            auc = roc_auc_score(y_va, va_score)
-            tpr05, thr05 = tpr_at_fpr(y_va, va_score, fpr_target=0.05)
-            tpr01, thr01 = tpr_at_fpr(y_va, va_score, fpr_target=0.01)
+        auc = roc_auc_score(y_va, va_score)
+        tpr05, thr05 = tpr_at_fpr(y_va, va_score, fpr_target=0.05)
+        tpr01, thr01 = tpr_at_fpr(y_va, va_score, fpr_target=0.01)
 
-            rows.append({
-                "model": model_name,
-                "fold": fold,
-                "auc": float(auc),
-                "tpr_at_fpr_5pct": tpr05,
-                "thr_at_fpr_5pct": thr05,
-                "tpr_at_fpr_1pct": tpr01,
-                "thr_at_fpr_1pct": thr01,
-            })
+        rows.append({
+            "model": model_name,
+            "params": str(params),
+            "fold": fold,
+            "auc": float(auc),
+            "tpr_at_fpr_5pct": tpr05,
+            "thr_at_fpr_5pct": thr05,
+            "tpr_at_fpr_1pct": tpr01,
+            "thr_at_fpr_1pct": thr01,
+        })
 
     return pd.DataFrame(rows)
 
 
-def fit_and_evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame, models: dict):
-    feature_cols, _, _ = build_feature_lists(train_df)
+def select_best_models(train_df, n_splits=5):
+    grids = parameter_grid()
+    detailed_rows = []
+    best_rows = []
+    best_specs = {}
+
+    for model_name, grid in grids.items():
+        print(f"\nRecherche hyperparamètres pour {model_name}...")
+        best_auc = -np.inf
+        best_params = None
+        best_cv_df = None
+
+        for i, params in enumerate(grid, start=1):
+            cv_df = cross_val_score_params(train_df, model_name, params, n_splits=n_splits)
+            mean_auc = cv_df["auc"].mean()
+
+            detailed_rows.append(cv_df)
+
+            if mean_auc > best_auc:
+                best_auc = mean_auc
+                best_params = params
+                best_cv_df = cv_df
+
+            if i % 5 == 0 or i == len(grid):
+                print(f"  {i}/{len(grid)} combinaisons testées")
+
+        best_rows.append({
+            "model": model_name,
+            "best_params": str(best_params),
+            "cv_auc_mean": float(best_cv_df["auc"].mean()),
+            "cv_auc_std": float(best_cv_df["auc"].std()),
+            "cv_tpr_at_fpr_5pct_mean": float(best_cv_df["tpr_at_fpr_5pct"].mean()),
+            "cv_tpr_at_fpr_1pct_mean": float(best_cv_df["tpr_at_fpr_1pct"].mean()),
+        })
+
+        best_specs[model_name] = best_params
+
+    detailed_df = pd.concat(detailed_rows, axis=0).reset_index(drop=True)
+    best_df = pd.DataFrame(best_rows).sort_values("cv_auc_mean", ascending=False).reset_index(drop=True)
+
+    return best_specs, detailed_df, best_df
+
+
+def fit_and_evaluate_best_models(train_df, test_df, best_specs):
+    feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
 
     X_train = train_df[feature_cols]
     y_train = train_df[TARGET_COL].astype(int).values
@@ -284,10 +419,10 @@ def fit_and_evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame, model
     roc_rows = []
     pred_rows = []
 
-    for model_name, pipe in models.items():
-        fitted = clone(pipe)
-        fitted.fit(X_train, y_train)
-        test_score = get_scores(fitted, X_test)
+    for model_name, params in best_specs.items():
+        pipe = build_model_pipeline(model_name, params, numeric_cols, categorical_cols)
+        pipe.fit(X_train, y_train)
+        test_score = get_scores(pipe, X_test)
 
         m05 = evaluate_predictions(y_test, test_score, threshold=0.5)
         tpr5, thr5 = tpr_at_fpr(y_test, test_score, fpr_target=0.05)
@@ -295,6 +430,7 @@ def fit_and_evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame, model
 
         metrics_rows.append({
             "model": model_name,
+            "best_params": str(params),
             "auc": m05["auc"],
             "fpr_at_threshold_0.5": m05["fpr"],
             "tpr_at_threshold_0.5": m05["tpr"],
@@ -331,7 +467,7 @@ def fit_and_evaluate_models(train_df: pd.DataFrame, test_df: pd.DataFrame, model
 
 def main():
     input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset_B.csv"
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else "output/model_comparison_global"
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else "output/model_comparison_with_xgboost"
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -350,31 +486,25 @@ def main():
     print("\nRépartition y test :")
     print(test_df[TARGET_COL].value_counts(normalize=True).sort_index())
 
-    feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
-    models = build_models(numeric_cols, categorical_cols)
+    print("\nSélection des hyperparamètres par CV groupée...")
+    best_specs, detailed_cv_df, best_df = select_best_models(train_df, n_splits=5)
 
-    print("\nValidation croisée groupée...")
-    cv_df = cross_validate_grouped(train_df, models=models, n_splits=5)
-    cv_df.to_csv(out_dir / "cv_results.csv", index=False)
+    detailed_cv_df.to_csv(out_dir / "cv_results_detailed.csv", index=False)
+    best_df.to_csv(out_dir / "cv_summary_best.csv", index=False)
 
-    cv_summary = (
-        cv_df.groupby("model", as_index=False)
-        .agg(
-            auc_mean=("auc", "mean"),
-            auc_std=("auc", "std"),
-            tpr_at_fpr_5pct_mean=("tpr_at_fpr_5pct", "mean"),
-            tpr_at_fpr_1pct_mean=("tpr_at_fpr_1pct", "mean"),
-        )
-        .sort_values("auc_mean", ascending=False)
-        .reset_index(drop=True)
-    )
-    cv_summary.to_csv(out_dir / "cv_summary.csv", index=False)
+    best_params_df = pd.DataFrame(
+        [{"model": k, "best_params": str(v)} for k, v in best_specs.items()]
+    ).sort_values("model").reset_index(drop=True)
+    best_params_df.to_csv(out_dir / "best_params.csv", index=False)
 
-    print("\nRésumé CV :")
-    print(cv_summary)
+    print("\nMeilleurs hyperparamètres :")
+    print(best_params_df)
 
-    print("\nEntraînement final et évaluation test...")
-    metrics_df, roc_df, pred_df = fit_and_evaluate_models(train_df, test_df, models=models)
+    print("\nRésumé CV des meilleurs modèles :")
+    print(best_df)
+
+    print("\nEntraînement final des meilleurs modèles et évaluation test...")
+    metrics_df, roc_df, pred_df = fit_and_evaluate_best_models(train_df, test_df, best_specs)
 
     metrics_df.to_csv(out_dir / "test_metrics.csv", index=False)
     roc_df.to_csv(out_dir / "roc_points.csv", index=False)
@@ -384,8 +514,9 @@ def main():
     print(metrics_df)
 
     print(f"\nFichiers sauvegardés dans : {out_dir}")
-    print("- cv_results.csv")
-    print("- cv_summary.csv")
+    print("- best_params.csv")
+    print("- cv_results_detailed.csv")
+    print("- cv_summary_best.csv")
     print("- test_metrics.csv")
     print("- roc_points.csv")
     print("- test_predictions_long.csv")
