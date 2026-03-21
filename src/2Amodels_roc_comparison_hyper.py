@@ -1,3 +1,4 @@
+#script qui utilise predict_proba()
 import sys
 from pathlib import Path
 import itertools
