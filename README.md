@@ -2,11 +2,11 @@
 
 ## Contexte et objectif
 
-**Météorage** est une entreprise française spécialisée dans la détection de la foudre (filiale de Météo-France). Leur service d'alerte fonctionne ainsi : dès qu'un premier éclair est détecté dans une zone de surveillance autour d'un aéroport, une alerte est déclenchée. Elle est levée **30 minutes après le dernier éclair nuage-sol** détecté dans la zone — c'est la **baseline**.
+**Météorage** est une entreprise française spécialisée dans la détection de la foudre (filiale de Météo-France). Leur service d'alerte fonctionne ainsi : dès qu'un premier éclair est détecté dans une zone de surveillance autour d'un aéroport, une alerte est déclenchée. Elle est levée **30 minutes après le dernier éclair nuage-sol** détecté dans la zone, c'est la **baseline**.
 
 Le problème : 30 minutes, c'est long. Dans un aéroport, ça signifie 30 minutes d'activité suspendue (pistes, personnel au sol, etc.) après chaque orage.
 
-**L'objectif de ce projet** est de prédire plus tôt la fin réelle de l'orage, afin de lever l'alerte avant la règle des 30 minutes — sans trop sacrifier la sécurité. On formule ça comme un **problème d'analyse de survie** : on cherche à estimer la probabilité que l'alerte soit encore active en fonction des caractéristiques de l'orage observé.
+**L'objectif de ce projet** est de prédire plus tôt la fin réelle de l'orage, afin de lever l'alerte avant la règle des 30 minutes, sans trop sacrifier la sécurité. On formule ça comme un **problème d'analyse de survie** : on cherche à estimer la probabilité que l'alerte soit encore active en fonction des caractéristiques de l'orage observé.
 
 ### Métriques clés
 
@@ -50,7 +50,7 @@ Les données ont été fournies par Météorage. Elles couvrent **10 ans d'obser
 
 > **Note :** `alert_airport_id` et `is_last_lightning_cloud_ground` ne sont renseignés que pour les éclairs à moins de 20 km de l'aéroport.
 
-> **Note :** Les données intra-nuage de Pise pour 2016 sont potentiellement incorrectes — à écarter pour ce type d'analyse.
+> **Note :** Les données intra-nuage de Pise pour 2016 sont potentiellement incorrectes, à écarter pour ce type d'analyse.
 
 ---
 
@@ -224,8 +224,8 @@ C-index RSF            : 0.969
 
 ## Pistes d'amélioration
 
-- **Nantes** a le taux de faux all-clear le plus élevé (27%) — piste : features spécifiques ou modèle dédié
-- Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min) — le modèle se trompe sur les orages qui font des pauses avant de reprendre
+- **Nantes** a le taux de faux all-clear le plus élevé (27%), piste : features spécifiques ou modèle dédié
+- Les faux all-clear sont quasi exclusivement des **alertes longues** (durée réelle moyenne : 112 min), le modèle se trompe sur les orages qui font des pauses avant de reprendre
 - Tester une **optimisation du seuil par aéroport** plutôt qu'un seuil global à 0.80
 - Explorer des **features de contexte météo** (saison, heure de la journée)
 
@@ -234,19 +234,19 @@ C-index RSF            : 0.969
 # Comment lancer les modèles(pour l'instant ignorez la version B et C)
 # Commandes du pipeline
 
-## Étape 1 — Build dataset
+## Étape 1 - Build dataset
 ```bash
 python src/build_silence_dataset.py
 ```
 
-## Étape 2 — Variantes B et C
+## Étape 2 - Variantes B et C
 ```bash
 python src/make_dataset_variants.py
 ```
 
-## Étape 3 — Entraînement
+## Étape 3 - Entraînement
 
-### Version A (avec time_since_* — fuite)
+### Version A (avec time_since_* - fuite)
 ```bash
 python src/2Amodels_roc_comparison.py output/silence_dataset.csv output/baseline_results_A
 ```
