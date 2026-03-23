@@ -1,4 +1,3 @@
-#script qui utilise directement get_scores()
 import sys
 from pathlib import Path
 import itertools
@@ -20,9 +19,16 @@ from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoost
 from xgboost import XGBClassifier
 
 
-TARGET_COL = "y"
+# ============================================================
+# Configuration
+# ============================================================
+
+TARGET_COL = "y_h20"   # "y_h20", "y_h30" ou "y_terminal"
 GROUP_COL = "alert_group"
 AIRPORT_COL = "airport"
+USE_AIRPORT_AS_FEATURE = True
+
+ALL_TARGET_COLS = {"y_terminal", "y_h20", "y_h30"}
 
 NON_FEATURE_COLS = {
     "airport_alert_id",
@@ -31,14 +37,24 @@ NON_FEATURE_COLS = {
     "alert_start",
     "decision_time",
     "cg_reference_index",
-    "minutes_since_reference_cg",  # exclue ici
-    "y",
+    # On garde minutes_since_reference_cg pour la baseline silence_rule
+    # et pour tester son apport réel dans les modèles
+    "use_airport_context",
+    *ALL_TARGET_COLS,
 }
 
+
+# ============================================================
+# Chargement
+# ============================================================
 
 def load_dataset(path: str) -> pd.DataFrame:
     return pd.read_csv(path, parse_dates=["obs_start", "alert_start", "decision_time"])
 
+
+# ============================================================
+# Split
+# ============================================================
 
 def train_test_split_by_alert(
     df: pd.DataFrame,
@@ -72,8 +88,25 @@ def train_test_split_by_alert(
     return train_df, test_df
 
 
+def leave_one_airport_out_splits(df: pd.DataFrame):
+    airports = sorted(df[AIRPORT_COL].dropna().unique())
+    for airport in airports:
+        train_df = df[df[AIRPORT_COL] != airport].copy()
+        test_df = df[df[AIRPORT_COL] == airport].copy()
+        if len(train_df) > 0 and len(test_df) > 0:
+            yield airport, train_df, test_df
+
+
+# ============================================================
+# Features / preprocessing
+# ============================================================
+
 def build_feature_lists(df: pd.DataFrame):
     feature_cols = [c for c in df.columns if c not in NON_FEATURE_COLS]
+
+    if not USE_AIRPORT_AS_FEATURE and AIRPORT_COL in feature_cols:
+        feature_cols.remove(AIRPORT_COL)
+
     numeric_cols = [c for c in feature_cols if pd.api.types.is_numeric_dtype(df[c])]
     categorical_cols = [c for c in feature_cols if c not in numeric_cols]
     return feature_cols, numeric_cols, categorical_cols
@@ -97,6 +130,10 @@ def make_preprocessor(numeric_cols, categorical_cols, scale_numeric=True):
 
     return preprocessor
 
+
+# ============================================================
+# Modèles
+# ============================================================
 
 def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
     if model_name in {"logistic", "knn"}:
@@ -290,12 +327,23 @@ def parameter_grid():
     }
 
 
+# ============================================================
+# Scores / métriques
+# ============================================================
+
 def get_scores(fitted_model, X):
     if hasattr(fitted_model, "predict_proba"):
         return fitted_model.predict_proba(X)[:, 1]
     if hasattr(fitted_model, "decision_function"):
         return fitted_model.decision_function(X)
     raise ValueError("Le modèle ne fournit ni predict_proba ni decision_function.")
+
+
+def simple_silence_score(df: pd.DataFrame) -> np.ndarray:
+    x = df["minutes_since_reference_cg"].astype(float).values
+    max_x = np.nanmax(x) if np.isfinite(np.nanmax(x)) else 1.0
+    max_x = max(max_x, 1.0)
+    return x / max_x
 
 
 def tpr_at_fpr(y_true, y_score, fpr_target=0.05):
@@ -305,6 +353,15 @@ def tpr_at_fpr(y_true, y_score, fpr_target=0.05):
         return 0.0, None
     idx = valid[-1]
     return float(tpr[idx]), float(thresholds[idx])
+
+
+def find_threshold_for_target_fpr(y_true, y_score, target_fpr=0.05):
+    fpr, tpr, thresholds = roc_curve(y_true, y_score)
+    valid = np.where(fpr <= target_fpr)[0]
+    if len(valid) == 0:
+        return 1.0
+    idx = valid[-1]
+    return float(thresholds[idx])
 
 
 def evaluate_predictions(y_true, y_score, threshold=0.5):
@@ -327,6 +384,50 @@ def evaluate_predictions(y_true, y_score, threshold=0.5):
         "fn": int(fn),
     }
 
+
+def evaluate_alert_level(pred_df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    rows = []
+
+    grouped = pred_df.sort_values(["model", GROUP_COL, "decision_time"]).groupby(
+        ["model", GROUP_COL], sort=False
+    )
+
+    for (model, alert_group), g in grouped:
+        g = g.sort_values("decision_time").reset_index(drop=True)
+
+        proposed = g[g["score"] >= threshold]
+        first_raise_time = proposed["decision_time"].iloc[0] if len(proposed) > 0 else pd.NaT
+
+        true_positive_zone = g[g[TARGET_COL] == 1]
+        first_true_time = true_positive_zone["decision_time"].iloc[0] if len(true_positive_zone) > 0 else pd.NaT
+
+        if pd.notna(first_raise_time) and pd.notna(first_true_time):
+            advance_min = (first_true_time - first_raise_time).total_seconds() / 60.0
+        else:
+            advance_min = np.nan
+
+        rows.append({
+            "model": model,
+            "alert_group": alert_group,
+            "airport": g[AIRPORT_COL].iloc[0],
+            "first_raise_time": first_raise_time,
+            "first_true_time": first_true_time,
+            "alert_has_raise": int(pd.notna(first_raise_time)),
+            "alert_has_true_positive_zone": int(pd.notna(first_true_time)),
+            "advance_min": advance_min,
+            "false_early_raise": int(
+                pd.notna(first_raise_time)
+                and pd.notna(first_true_time)
+                and first_raise_time < first_true_time
+            ),
+        })
+
+    return pd.DataFrame(rows)
+
+
+# ============================================================
+# CV / sélection
+# ============================================================
 
 def cross_val_score_params(train_df, model_name, params, n_splits=5):
     feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
@@ -372,18 +473,23 @@ def select_best_models(train_df, n_splits=5):
 
     for model_name, grid in grids.items():
         print(f"\nRecherche hyperparamètres pour {model_name}...")
-        best_auc = -np.inf
+        best_primary = -np.inf
+        best_secondary = -np.inf
         best_params = None
         best_cv_df = None
 
         for i, params in enumerate(grid, start=1):
             cv_df = cross_val_score_params(train_df, model_name, params, n_splits=n_splits)
             mean_auc = cv_df["auc"].mean()
+            mean_tpr5 = cv_df["tpr_at_fpr_5pct"].mean()
 
             detailed_rows.append(cv_df)
 
-            if mean_auc > best_auc:
-                best_auc = mean_auc
+            if (mean_tpr5 > best_primary) or (
+                np.isclose(mean_tpr5, best_primary) and mean_auc > best_secondary
+            ):
+                best_primary = mean_tpr5
+                best_secondary = mean_auc
                 best_params = params
                 best_cv_df = cv_df
 
@@ -393,6 +499,7 @@ def select_best_models(train_df, n_splits=5):
         best_rows.append({
             "model": model_name,
             "best_params": str(best_params),
+            "selection_metric": "cv_tpr_at_fpr_5pct_mean",
             "cv_auc_mean": float(best_cv_df["auc"].mean()),
             "cv_auc_std": float(best_cv_df["auc"].std()),
             "cv_tpr_at_fpr_5pct_mean": float(best_cv_df["tpr_at_fpr_5pct"].mean()),
@@ -402,10 +509,16 @@ def select_best_models(train_df, n_splits=5):
         best_specs[model_name] = best_params
 
     detailed_df = pd.concat(detailed_rows, axis=0).reset_index(drop=True)
-    best_df = pd.DataFrame(best_rows).sort_values("cv_auc_mean", ascending=False).reset_index(drop=True)
+    best_df = pd.DataFrame(best_rows).sort_values(
+        ["cv_tpr_at_fpr_5pct_mean", "cv_auc_mean"], ascending=False
+    ).reset_index(drop=True)
 
     return best_specs, detailed_df, best_df
 
+
+# ============================================================
+# Entraînement final / test
+# ============================================================
 
 def fit_and_evaluate_best_models(train_df, test_df, best_specs):
     feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
@@ -418,7 +531,49 @@ def fit_and_evaluate_best_models(train_df, test_df, best_specs):
     metrics_rows = []
     roc_rows = []
     pred_rows = []
+    alert_eval_rows = []
 
+    # Baseline silence_rule
+    silence_score = simple_silence_score(test_df)
+    silence_m05 = evaluate_predictions(y_test, silence_score, threshold=0.5)
+    silence_tpr5, silence_thr5 = tpr_at_fpr(y_test, silence_score, fpr_target=0.05)
+    silence_tpr1, silence_thr1 = tpr_at_fpr(y_test, silence_score, fpr_target=0.01)
+
+    metrics_rows.append({
+        "model": "silence_rule",
+        "best_params": "{}",
+        "auc": silence_m05["auc"],
+        "fpr_at_threshold_0.5": silence_m05["fpr"],
+        "tpr_at_threshold_0.5": silence_m05["tpr"],
+        "tpr_at_fpr_5pct": silence_tpr5,
+        "threshold_at_fpr_5pct": silence_thr5,
+        "tpr_at_fpr_1pct": silence_tpr1,
+        "threshold_at_fpr_1pct": silence_thr1,
+        "tp_at_0.5": silence_m05["tp"],
+        "fp_at_0.5": silence_m05["fp"],
+        "tn_at_0.5": silence_m05["tn"],
+        "fn_at_0.5": silence_m05["fn"],
+    })
+
+    fpr, tpr, thresholds = roc_curve(y_test, silence_score)
+    roc_rows.append(pd.DataFrame({
+        "model": "silence_rule",
+        "fpr": fpr,
+        "tpr": tpr,
+        "threshold": thresholds,
+    }))
+
+    pred_silence_df = test_df[[AIRPORT_COL, "airport_alert_id", GROUP_COL, "decision_time", TARGET_COL]].copy()
+    pred_silence_df["model"] = "silence_rule"
+    pred_silence_df["score"] = silence_score
+    pred_rows.append(pred_silence_df)
+
+    if silence_thr5 is not None:
+        alert_eval_df = evaluate_alert_level(pred_silence_df, threshold=silence_thr5)
+        alert_eval_df["threshold_used"] = silence_thr5
+        alert_eval_rows.append(alert_eval_df)
+
+    # Modèles ML
     for model_name, params in best_specs.items():
         pipe = build_model_pipeline(model_name, params, numeric_cols, categorical_cols)
         pipe.fit(X_train, y_train)
@@ -458,21 +613,35 @@ def fit_and_evaluate_best_models(train_df, test_df, best_specs):
         pred_df["score"] = test_score
         pred_rows.append(pred_df)
 
-    metrics_df = pd.DataFrame(metrics_rows).sort_values("auc", ascending=False).reset_index(drop=True)
+        if thr5 is not None:
+            alert_eval_df = evaluate_alert_level(pred_df, threshold=thr5)
+            alert_eval_df["threshold_used"] = thr5
+            alert_eval_rows.append(alert_eval_df)
+
+    metrics_df = pd.DataFrame(metrics_rows).sort_values(
+        ["tpr_at_fpr_5pct", "auc"], ascending=False
+    ).reset_index(drop=True)
     roc_df = pd.concat(roc_rows, axis=0).reset_index(drop=True)
     pred_df = pd.concat(pred_rows, axis=0).reset_index(drop=True)
+    alert_eval_df = pd.concat(alert_eval_rows, axis=0).reset_index(drop=True)
 
-    return metrics_df, roc_df, pred_df
+    return metrics_df, roc_df, pred_df, alert_eval_df
 
+
+# ============================================================
+# Main
+# ============================================================
 
 def main():
-    input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset_B.csv"
+    input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset.csv"
     out_dir = sys.argv[2] if len(sys.argv) > 2 else "output/model_comparison_with_xgboost"
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Chargement : {input_path}")
+    print(f"Cible utilisée : {TARGET_COL}")
+    print(f"Airport utilisé comme feature : {USE_AIRPORT_AS_FEATURE}")
     df = load_dataset(input_path)
 
     print("Split train/test groupé par alerte...")
@@ -504,11 +673,12 @@ def main():
     print(best_df)
 
     print("\nEntraînement final des meilleurs modèles et évaluation test...")
-    metrics_df, roc_df, pred_df = fit_and_evaluate_best_models(train_df, test_df, best_specs)
+    metrics_df, roc_df, pred_df, alert_eval_df = fit_and_evaluate_best_models(train_df, test_df, best_specs)
 
     metrics_df.to_csv(out_dir / "test_metrics.csv", index=False)
     roc_df.to_csv(out_dir / "roc_points.csv", index=False)
     pred_df.to_csv(out_dir / "test_predictions_long.csv", index=False)
+    alert_eval_df.to_csv(out_dir / "alert_level_evaluation.csv", index=False)
 
     print("\nMétriques test :")
     print(metrics_df)
@@ -520,6 +690,7 @@ def main():
     print("- test_metrics.csv")
     print("- roc_points.csv")
     print("- test_predictions_long.csv")
+    print("- alert_level_evaluation.csv")
 
 
 if __name__ == "__main__":
