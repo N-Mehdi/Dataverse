@@ -208,6 +208,7 @@ __marimo__/
 
 # bdd
 *.csv 
+*.parquet
 models/
 data/*.csv
 
