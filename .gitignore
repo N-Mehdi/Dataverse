@@ -212,6 +212,11 @@ models/
 data/*.csv
 
 # fichiers annexes
+others/2Amodels_roc_comparison_hyper.py
+others/2Amodels_roc_comparison.py
+others/roc_2A.py
+others/run_baseline_classifier.py
+others/make_dataset_variants.py
 others/build_sequential_dataset.py
 others/build_sequential_dataset1.py
 others/evaluate_xgb.py
