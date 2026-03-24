@@ -12,6 +12,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from xgboost import XGBClassifier
 
+import joblib
+
 
 TARGET_COL = "y"
 GROUP_COL = "alert_group"
@@ -297,7 +299,7 @@ def evaluate_predictions(y_true, y_score, threshold=0.5):
     }
 
 
-def fit_and_evaluate_best_models(train_df, test_df, best_specs):
+def fit_and_evaluate_best_models(train_df, test_df, best_specs, out_dir):
     feature_cols, numeric_cols, categorical_cols = build_feature_lists(train_df)
 
     X_train = train_df[feature_cols]
@@ -312,6 +314,7 @@ def fit_and_evaluate_best_models(train_df, test_df, best_specs):
     for model_name, params in best_specs.items():
         pipe = build_model_pipeline(model_name, params, numeric_cols, categorical_cols)
         pipe.fit(X_train, y_train)
+        joblib.dump(pipe, out_dir / f"model_{model_name}.pkl")
         test_score = get_scores(pipe, X_test)
 
         m05 = evaluate_predictions(y_test, test_score, threshold=0.5)
@@ -411,7 +414,7 @@ def main():
 
     print("\nEntraînement final des meilleurs modèles et évaluation test...")
     metrics_df, roc_df, pred_df = fit_and_evaluate_best_models(
-        train_df, test_df, best_specs
+        train_df, test_df, best_specs, out_dir
     )
 
     metrics_df.to_csv(out_dir / "test_metrics.csv", index=False)
