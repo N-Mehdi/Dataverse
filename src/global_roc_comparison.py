@@ -43,6 +43,9 @@ BEST_SPECS = {
 
 
 def load_dataset(path: str) -> pd.DataFrame:
+    p = Path(path)
+    if p.suffix == ".parquet":
+        return pd.read_parquet(path)
     return pd.read_csv(path, parse_dates=["obs_start", "alert_start", "decision_time"])
 
 
@@ -363,7 +366,7 @@ def fit_and_evaluate_best_models(train_df, test_df, best_specs):
 
 
 def main():
-    input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset.csv"
+    input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset.parquet"
     out_dir = (
         sys.argv[2] if len(sys.argv) > 2 else "output/model_comparison_with_xgboost"
     )
