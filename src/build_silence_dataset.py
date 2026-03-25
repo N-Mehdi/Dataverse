@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 
 INNER_RADIUS_KM = 20.0
-PRE_ALERT_WINDOW_MIN = 10
-SILENCE_GRID_MIN = 1
+LRE_RADIUS_KM = 3.0
+PRE_ALERT_WINDOW_MIN = 29
+SILENCE_GRID_MIN = 3
 MAX_SILENCE_MIN = 30
 ROLLING_WINDOWS_MIN = [5, 10, 20]
 
@@ -73,17 +74,6 @@ def build_silence_decision_times(alert_cg_inner: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-# ---------------------------------------------------------------------------
-# Contexte pré-calculé par alerte — cœur de l'optimisation
-#
-# Au lieu de reconstruire un sous-DataFrame par filtrage booléen O(n)
-# à chaque instant t, on précalcule une seule fois :
-#   - les timestamps en int64 nanosecondes → searchsorted O(log n)
-#   - les masques booléens par type/zone → slices O(1)
-#   - les arrays amplitude/dist
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class AlertContext:
     df: pd.DataFrame
@@ -97,6 +87,7 @@ class AlertContext:
     is_cg_outer: np.ndarray
     is_ic_inner: np.ndarray
     is_ic_outer: np.ndarray
+    is_lre: np.ndarray
     amplitudes: np.ndarray
     dists: np.ndarray
     obs_start: pd.Timestamp
@@ -122,6 +113,9 @@ def build_alert_context(
     is_inner = zones == "inner"
     is_outer = zones == "outer"
 
+    dists = airport_hist["dist"].values.astype("float64")
+    is_lre = (~np.isnan(dists)) & (dists < LRE_RADIUS_KM)
+
     return AlertContext(
         df=airport_hist,
         dates_ns=dates_ns,
@@ -134,8 +128,9 @@ def build_alert_context(
         is_cg_outer=is_cg & is_outer,
         is_ic_inner=is_ic & is_inner,
         is_ic_outer=is_ic & is_outer,
+        is_lre=is_lre,
         amplitudes=airport_hist["amplitude"].values.astype("float64"),
-        dists=airport_hist["dist"].values.astype("float64"),
+        dists=dists,
         obs_start=obs_start,
         alert_start=alert_start,
         obs_elapsed_full=minutes_between(airport_hist["date"].iloc[-1], obs_start)
@@ -149,6 +144,13 @@ def _time_since_last_ns(dates_ns, mask, s, e, fallback_min):
     if len(active) == 0:
         return fallback_min
     return (dates_ns[e - 1] - active[-1]) / 6e10  # ns → minutes
+
+
+def _time_since_last_masked_ns(dates_ns, mask, t_ns, s, e, fallback_min):
+    active = dates_ns[s:e][mask[s:e]]
+    if len(active) == 0:
+        return fallback_min
+    return (t_ns - active[-1]) / 6e10  # ns → minutes
 
 
 def compute_features_at_t(ctx: AlertContext, t: pd.Timestamp) -> dict:
@@ -173,6 +175,7 @@ def compute_features_at_t(ctx: AlertContext, t: pd.Timestamp) -> dict:
     n_cg_outer = int(ctx.is_cg_outer[s:e].sum())
     n_ic_inner = int(ctx.is_ic_inner[s:e].sum())
     n_ic_outer = int(ctx.is_ic_outer[s:e].sum())
+    n_lre = int(ctx.is_lre[s:e].sum())
 
     # Amplitude et distance
     amp_abs = np.abs(ctx.amplitudes[s:e])
@@ -234,6 +237,7 @@ def compute_features_at_t(ctx: AlertContext, t: pd.Timestamp) -> dict:
         "n_cg_outer": n_cg_outer,
         "n_ic_inner": n_ic_inner,
         "n_ic_outer": n_ic_outer,
+        "n_lre": n_lre,
         "amp_abs_mean": amp_abs_mean,
         "amp_abs_max": amp_abs_max,
         "dist_mean": dist_mean,
@@ -268,6 +272,7 @@ def compute_features_at_t(ctx: AlertContext, t: pd.Timestamp) -> dict:
         feats[f"n_cg_outer_last_{w}m"] = int(ctx.is_cg_outer[sw:e].sum())
         feats[f"n_ic_inner_last_{w}m"] = int(ctx.is_ic_inner[sw:e].sum())
         feats[f"n_ic_outer_last_{w}m"] = int(ctx.is_ic_outer[sw:e].sum())
+        feats[f"n_lre_last_{w}m"] = int(ctx.is_lre[sw:e].sum())
 
         d_w = ctx.dists[sw:e]
         valid_d_w = ~np.isnan(d_w)
@@ -278,6 +283,27 @@ def compute_features_at_t(ctx: AlertContext, t: pd.Timestamp) -> dict:
 
         a_w = np.abs(ctx.amplitudes[sw:e])
         feats[f"amp_abs_mean_last_{w}m"] = float(np.nanmean(a_w)) if (e > sw) else 0.0
+
+    # Features LRE / approche progressive
+    # LRE = éclair à moins de 3 km
+    has_lre_before = int(n_lre > 0)
+
+    time_since_last_lre_min = _time_since_last_masked_ns(
+        ctx.dates_ns, ctx.is_lre, t_ns, s, e, obs_elapsed_min
+    )
+
+    delta_dist_min_20_5 = feats["dist_min_last_20m"] - feats["dist_min_last_5m"]
+    delta_dist_mean_20_5 = feats["dist_mean_last_20m"] - feats["dist_mean_last_5m"]
+
+    n_lt_3km_last_10m = feats["n_lre_last_10m"]
+    n_lt_3km_last_20m = feats["n_lre_last_20m"]
+
+    feats["has_lre_before"] = has_lre_before
+    feats["time_since_last_lre_min"] = round(time_since_last_lre_min, 3)
+    feats["delta_dist_min_20_5"] = round(delta_dist_min_20_5, 3)
+    feats["delta_dist_mean_20_5"] = round(delta_dist_mean_20_5, 3)
+    feats["n_lt_3km_last_10m"] = int(n_lt_3km_last_10m)
+    feats["n_lt_3km_last_20m"] = int(n_lt_3km_last_20m)
 
     return feats
 

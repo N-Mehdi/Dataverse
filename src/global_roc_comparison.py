@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -33,13 +33,13 @@ NON_FEATURE_COLS = {
 # Meilleurs hyperparamètres issus de la recherche précédente (best_params.csv)
 BEST_SPECS = {
     "xgboost": {
-        "n_estimators": 300,
-        "max_depth": 3,
+        "n_estimators": 100,
+        "max_depth": 7,
         "learning_rate": 0.03,
         "subsample": 0.8,
-        "colsample_bytree": 1.0,
-        "min_child_weight": 5,
-        "reg_lambda": 5.0,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 1,
+        "reg_lambda": 1.0,
     }
 }
 
@@ -60,13 +60,38 @@ def train_test_split_by_alert(
     test_parts = []
 
     for airport, sub in df.groupby(AIRPORT_COL):
-        alert_level = sub[[GROUP_COL]].drop_duplicates().copy()
-        groups = alert_level[GROUP_COL].values
-
-        gss = GroupShuffleSplit(
-            n_splits=1, test_size=test_size, random_state=random_state
+        alert_level = (
+            sub.groupby(GROUP_COL, as_index=False)
+            .agg(
+                airport=(AIRPORT_COL, "first"),
+                airport_alert_id=("airport_alert_id", "first"),
+                has_lre_alert=("has_lre_before", "max"),
+            )
+            .copy()
         )
-        idx_train, idx_test = next(gss.split(alert_level, groups=groups))
+
+        alert_level["has_lre_alert"] = (
+            alert_level["has_lre_alert"].fillna(0).astype(int)
+        )
+
+        class_counts = alert_level["has_lre_alert"].value_counts()
+        can_stratify = len(class_counts) >= 2 and class_counts.min() >= 2
+
+        if can_stratify:
+            sss = StratifiedShuffleSplit(
+                n_splits=1, test_size=test_size, random_state=random_state
+            )
+            idx_train, idx_test = next(
+                sss.split(alert_level, alert_level["has_lre_alert"])
+            )
+        else:
+            n_alerts = len(alert_level)
+            rng = np.random.RandomState(random_state)
+            perm = rng.permutation(n_alerts)
+
+            n_test = max(1, int(round(test_size * n_alerts)))
+            idx_test = perm[:n_test]
+            idx_train = perm[n_test:]
 
         train_groups = set(alert_level.iloc[idx_train][GROUP_COL])
         test_groups = set(alert_level.iloc[idx_test][GROUP_COL])
@@ -380,11 +405,24 @@ def main():
     print(f"Chargement : {input_path}")
     df = load_dataset(input_path)
 
-    print("Split train/test groupé par alerte...")
+    print("Split train/test groupé par alerte et stratifié sur les LRE...")
     train_df, test_df = train_test_split_by_alert(df, test_size=0.2, random_state=42)
 
     print(f"Train lignes : {len(train_df)} | alertes : {train_df[GROUP_COL].nunique()}")
     print(f"Test  lignes : {len(test_df)} | alertes : {test_df[GROUP_COL].nunique()}")
+
+    train_alert_lre = (
+        train_df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
+    )
+    test_alert_lre = (
+        test_df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
+    )
+
+    print("\nRépartition alertes LRE train :")
+    print(train_alert_lre.value_counts(normalize=True).sort_index())
+
+    print("\nRépartition alertes LRE test :")
+    print(test_alert_lre.value_counts(normalize=True).sort_index())
 
     print("\nRépartition y train :")
     print(train_df[TARGET_COL].value_counts(normalize=True).sort_index())
