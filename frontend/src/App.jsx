@@ -477,23 +477,23 @@ function ModelPage() {
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={c.card}>
-          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 17, fontWeight: 500, color: 'var(--text)' }}>
             Objectif
           </div>
-          <div style={{ padding: '18px 22px', fontSize: 14, color: 'var(--text2)', lineHeight: 1.9 }}>
-            <p>Prédire si, à un instant <code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 13 }}>t</code> de silence,
-            il n'y aura plus aucun éclair CG nuage→sol dans la zone inner (&lt; 20 km) après <code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 13 }}>t</code>.</p>
+          <div style={{ padding: '18px 22px', fontSize: 15, color: 'var(--text2)', lineHeight: 1.9 }}>
+            <p>Prédire si, à un instant <code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 15 }}>t</code> de silence,
+            il n'y aura plus aucun éclair CG (nuage→sol) dans la zone inner (&lt; 20 km) après <code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 15 }}>t</code>.</p>
             <br/>
-            <p><code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 13 }}>y = 1</code> → alerte terminée,
-            &nbsp;<code style={{ fontFamily: 'var(--mono)', color: 'var(--text3)', fontSize: 13 }}>y = 0</code> → alerte encore active.</p>
+            <p><code style={{ fontFamily: 'var(--mono)', color: 'var(--bolt)', fontSize: 15 }}>y = 1</code> → alerte terminée,
+            &nbsp;<code style={{ fontFamily: 'var(--mono)', color: 'var(--text3)', fontSize: 15 }}>y = 0</code> → alerte encore active.</p>
             <br/>
             <p>Instants de décision générés toutes les <strong style={{ color: 'var(--text)' }}>3 min</strong> de silence,
-            jusqu'à <strong style={{ color: 'var(--text)' }}>30 min</strong> après chaque éclair CG inner.</p>
+            jusqu'à <strong style={{ color: 'var(--text)' }}>30 min</strong> après le dernier éclair CG (Baseline).</p>
           </div>
         </div>
 
         <div style={c.card}>
-          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 17, fontWeight: 500, color: 'var(--text)' }}>
             Hyperparamètres
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
