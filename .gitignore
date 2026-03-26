@@ -226,3 +226,6 @@ others/predict_xgb.py
 others/train_xgb.py
 
 others/
+
+node_modules/
+frontend/dist/
