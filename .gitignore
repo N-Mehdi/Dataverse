@@ -211,6 +211,7 @@ __marimo__/
 *.parquet
 models/
 data/*.csv
+data/*.parquet
 
 # fichiers annexes
 others/2Amodels_roc_comparison_hyper.py
@@ -229,3 +230,4 @@ others/
 
 node_modules/
 frontend/dist/
+
