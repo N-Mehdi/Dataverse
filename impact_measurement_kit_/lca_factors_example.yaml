@@ -1,0 +1,18 @@
+electricity:
+  # Replace these example placeholders with documented values for your site or provider.
+  price_eur_per_kwh: 0.20
+  water_l_per_kwh: null
+  adpe_kg_sbeq_per_kwh: null
+  primary_energy_mj_per_kwh: null
+
+hardware:
+  name: "replace-with-your-laptop-or-server"
+  lifetime_hours: 17520   # Example: 2 years x 24 h/day x 365 days, adjust to your accounting rule.
+  embodied:
+    gwp_kg_co2eq: null
+    water_l: null
+    adpe_kg_sbeq: null
+    primary_energy_mj: null
+
+production:
+  annual_alerts: null

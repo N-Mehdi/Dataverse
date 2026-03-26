@@ -1,0 +1,44 @@
+machine:
+  owner: ""
+  hostname: ""
+  usage_context: "local workstation / server / cloud VM"
+  location_country: ""
+  location_region: ""
+  operating_system: ""
+
+cpu:
+  manufacturer: ""
+  model: ""
+  physical_cores: null
+  logical_cores: null
+  tdp_w: null
+
+gpu:
+  used: false
+  count: 0
+  model: ""
+  memory_gb_each: null
+  tdp_w_each: null
+
+ram:
+  total_gb: null
+
+storage:
+  system_disk_type: "SSD/NVMe/HDD"
+  system_disk_capacity_gb: null
+
+network:
+  local_or_cloud: ""
+  provider_if_cloud: ""
+  region_if_cloud: ""
+
+acv_sources:
+  electricity_factor_source: ""
+  water_factor_source: ""
+  adpe_factor_source: ""
+  hardware_embodied_source: ""
+
+project_allocation:
+  machine_shared_with_other_projects: true
+  allocation_rule: "runtime share / dedicated machine / other"
+  comments: ""
