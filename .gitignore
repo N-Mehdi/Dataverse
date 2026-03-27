@@ -231,3 +231,8 @@ others/
 node_modules/
 frontend/dist/
 
+impact_measurement_kit_/*.json
+impact_measurement_kit_/*.csv
+impact_measurement_kit_/impact_runs/*.csv
+impact_measurement_kit_/impact_runs/*.json
+
