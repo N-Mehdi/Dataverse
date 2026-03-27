@@ -1,0 +1,21 @@
+{
+  "run_name": "predict_batch",
+  "hostname": "ensai-id-std017",
+  "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+  "python_version": "3.12.12",
+  "cpu_count_logical": 12,
+  "cpu_count_physical": 10,
+  "ram_total_gb": 30.986,
+  "gpus": [],
+  "start_time_epoch": 1774577192.9499774,
+  "end_time_epoch": 1774577248.88831,
+  "elapsed_seconds": 55.3079,
+  "emissions_kg_co2eq": 1.1446572097119454e-05,
+  "max_rss_gb": 0.1197,
+  "max_cpu_percent": 46.6,
+  "avg_cpu_percent": 13.12,
+  "process_read_gb": 0.0,
+  "process_write_gb": 0.0089,
+  "status": "success",
+  "notes": "Inférence batch / prédiction"
+}

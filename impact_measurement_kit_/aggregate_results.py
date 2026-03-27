@@ -37,7 +37,11 @@ def main(folder="impact_runs", output_csv="impact_summary.csv"):
         energy_kwh = extract_energy_kwh(cc_row)
         row = {**meta, **cc_row}
         row["energy_kwh"] = energy_kwh
-        row["elapsed_hours"] = row["elapsed_seconds"] / 3600 if row.get("elapsed_seconds") is not None else None
+        row["elapsed_hours"] = (
+            row["elapsed_seconds"] / 3600
+            if row.get("elapsed_seconds") is not None
+            else None
+        )
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -59,7 +63,9 @@ def main(folder="impact_runs", output_csv="impact_summary.csv"):
             "gpus",
             "notes",
         ]
-        ordered = [c for c in preferred_cols if c in df.columns] + [c for c in df.columns if c not in preferred_cols]
+        ordered = [c for c in preferred_cols if c in df.columns] + [
+            c for c in df.columns if c not in preferred_cols
+        ]
         df = df[ordered]
     df.to_csv(output_csv, index=False)
     print(df)
@@ -67,4 +73,7 @@ def main(folder="impact_runs", output_csv="impact_summary.csv"):
 
 
 if __name__ == "__main__":
-    main()
+    main(
+        folder="impact_measurement_kit_/impact_runs",
+        output_csv="impact_measurement_kit_/impact_summary.csv",
+    )
