@@ -225,6 +225,7 @@ others/evaluate_xgb.py
 others/features.py
 others/predict_xgb.py
 others/train_xgb.py
+others/exploration.html
 
 others/
 
@@ -238,3 +239,5 @@ impact_measurement_kit_/impact_runs/*.json
 
 output/*.csv
 output/*.parquet
+
+data/*.html
