@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from src.build_silence_dataset import build_silence_dataset, INNER_RADIUS_KM
+sys.path.append(str(Path(__file__).resolve().parent))
+from build_silence_dataset import build_silence_dataset, INNER_RADIUS_KM
+
 
 
 def load_raw_dataset(path: str) -> pd.DataFrame:
@@ -52,7 +54,7 @@ def main():
     input_path = (
         sys.argv[1]
         if len(sys.argv) > 1
-        else "data/segment_alerts_all_airports_truncated.csv"
+        else "data/data_test.csv"
     )
     model_path = (
         sys.argv[2]
