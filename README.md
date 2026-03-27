@@ -80,7 +80,7 @@ python src/main_plots.py
 
 Lancer les deux services en parallèle dans deux terminaux séparés.
 
-**Prédiction de score de confiance à partir de données**
+**Site pour la prédiction de score de confiance à partir de données tronquées**
 
 **Terminal 1 - Backend API :**
 ```bash
@@ -96,6 +96,15 @@ cd Dataverse/frontend
 npm run dev
 # Interface disponible sur http://localhost:3000
 ```
+Pour entraîner un modèle et afficher les résultats : 
+
+Ajouter le fichier de données .csv à data/
+
+```
+python src/build_silence_dataset.py
+python src/Logistic_Regression/Logistic_Regression.py # à adapter pour les autres modèles
+```
+
 
 **Diagnostic RSE des modèles**
 ```bash
