@@ -135,7 +135,7 @@ Dataverse/
 ├── frontend/                           # Interface React
 ├── impact_measurement_kit_/            # Outils de mesure RSE
 ├── doc/                                # Documentation des features
-├── data/                               # Données brutes (non versionnées) et notebook d'analyse
+├── data/                               # Données brutes (non versionnées)
 ├── pyproject.toml
 └── README.md
 ```
