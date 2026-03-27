@@ -72,6 +72,12 @@ npm install
 
 ### Exécution
 
+**Courbes ROC des modèles  
+Courbe du compromis gain / risque pour le modèle logistique (possible pour xgboost aussi)**
+```
+python src/main_plots.py
+```
+
 Lancer les deux services en parallèle dans deux terminaux séparés.
 
 **Terminal 1 - Backend API :**
@@ -89,11 +95,9 @@ npm run dev
 # Interface disponible sur http://localhost:3000
 ```
 
-### Exécution
-**Courbes ROC des modèles  
-Courbe du compromis gain / risque**
+**Diagnostic RSE des modèles**
 ```bash
-python src/main_plots.py
+bash impact_measurement_kit_/compare_rse_models.sh
 ```
 
 
