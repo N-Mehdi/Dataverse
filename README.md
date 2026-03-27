@@ -53,7 +53,7 @@ La solution est exposée via une interface web (React) connectée à une API (Fa
 
 **Installer uv (si pas déjà installé) :**
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh # Windows powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 uv : un gestionnaire de packages Python ultra-rapide (remplaçant de pip + venv), développé par Astral.
  
@@ -99,7 +99,6 @@ cd Dataverse/frontend
 npm run dev
 # Interface disponible sur http://localhost:3000
 ```
-
 
 ### Utilisation
 
