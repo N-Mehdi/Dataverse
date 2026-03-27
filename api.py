@@ -12,7 +12,9 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
+
 
 from src.build_silence_dataset import build_silence_dataset
 from src.predict import load_raw_dataset, build_predictions_from_scores
@@ -21,7 +23,7 @@ from src.predict import load_raw_dataset, build_predictions_from_scores
 # Config
 # ---------------------------------------------------------------------------
 
-MODEL_PATH = Path("output/model_full_with_xgboost/model_xgboost_full.pkl")
+MODEL_PATH = Path("output/model_full_with_logistic/model_logistic_full.pkl")
 THETA = 0.906
 
 FEATURE_EXCLUDED = {
@@ -35,7 +37,7 @@ FEATURE_EXCLUDED = {
     "y",
 }
 
-app = FastAPI(title="DATAVERSE API", version="1.0")
+app = FastAPI(title="Lightning Alert API", version="1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -118,6 +120,11 @@ def load_upload(file: UploadFile) -> pd.DataFrame:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/docs")
 
 
 @app.post("/predict/summary")

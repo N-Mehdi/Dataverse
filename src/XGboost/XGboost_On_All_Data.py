@@ -28,7 +28,7 @@ NON_FEATURE_COLS = {
     "y",
 }
 
-# Meilleurs hyperparamètres issus de la recherche précédente (best_params.csv)
+# Meilleurs hyperparamètres
 BEST_SPECS = {
     "xgboost": {
         "n_estimators": 300,
@@ -126,9 +126,7 @@ def fit_final_models(df, best_specs, out_dir):
 
 def main():
     input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset.parquet"
-    out_dir = (
-        sys.argv[2] if len(sys.argv) > 2 else "output/model_full_with_xgboost"
-    )
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else "output/model_full_with_xgboost"
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -141,9 +139,7 @@ def main():
     print(f"Nb aéroports : {df[AIRPORT_COL].nunique()}")
 
     if "has_lre_before" in df.columns:
-        alert_lre = (
-            df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
-        )
+        alert_lre = df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
         print("\nRépartition alertes LRE :")
         print(alert_lre.value_counts(normalize=True).sort_index())
 

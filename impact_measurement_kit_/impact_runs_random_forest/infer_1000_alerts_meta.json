@@ -1,0 +1,21 @@
+{
+  "run_name": "infer_1000_alerts",
+  "hostname": "ensai-id-std017",
+  "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+  "python_version": "3.12.12",
+  "cpu_count_logical": 12,
+  "cpu_count_physical": 10,
+  "ram_total_gb": 30.986,
+  "gpus": [],
+  "start_time_epoch": 1774581441.1822581,
+  "end_time_epoch": 1774581443.0754082,
+  "elapsed_seconds": 1.2619,
+  "emissions_kg_co2eq": 4.872814068736401e-07,
+  "max_rss_gb": 0.387,
+  "max_cpu_percent": 8.9,
+  "avg_cpu_percent": 2.08,
+  "process_read_gb": 0.0,
+  "process_write_gb": 0.0,
+  "status": "success",
+  "notes": "Inférence batch de 1000 alertes"
+}

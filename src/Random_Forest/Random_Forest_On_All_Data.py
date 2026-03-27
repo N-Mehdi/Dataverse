@@ -29,12 +29,12 @@ NON_FEATURE_COLS = {
 
 BEST_SPECS = {
     "random_forest": {
-        "n_estimators": None,       # à remplir après recherche hyperparamètres
-        "max_depth": None,          # à remplir après recherche hyperparamètres
-        "min_samples_split": None,  # à remplir après recherche hyperparamètres
-        "min_samples_leaf": None,   # à remplir après recherche hyperparamètres
-        "max_features": None,       # à remplir après recherche hyperparamètres
-        "class_weight": None,       # à remplir après recherche hyperparamètres
+        "n_estimators": 500,
+        "max_depth": 10,
+        "min_samples_split": 2,
+        "min_samples_leaf": 4,
+        "max_features": "sqrt",
+        "class_weight": "balanced",
     }
 }
 
@@ -54,19 +54,25 @@ def build_feature_lists(df: pd.DataFrame):
 
 
 def make_preprocessor(numeric_cols, categorical_cols):
-    numeric_pipe = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-    ])
+    numeric_pipe = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="median")),
+        ]
+    )
 
-    categorical_pipe = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore")),
-    ])
+    categorical_pipe = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore")),
+        ]
+    )
 
-    return ColumnTransformer([
-        ("num", numeric_pipe, numeric_cols),
-        ("cat", categorical_pipe, categorical_cols),
-    ])
+    return ColumnTransformer(
+        [
+            ("num", numeric_pipe, numeric_cols),
+            ("cat", categorical_pipe, categorical_cols),
+        ]
+    )
 
 
 def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
@@ -86,10 +92,12 @@ def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
     else:
         raise ValueError(f"Modèle inconnu : {model_name}")
 
-    return Pipeline([
-        ("preprocess", preproc),
-        ("model", model),
-    ])
+    return Pipeline(
+        [
+            ("preprocess", preproc),
+            ("model", model),
+        ]
+    )
 
 
 def fit_final_models(df, best_specs, out_dir):
@@ -111,7 +119,9 @@ def fit_final_models(df, best_specs, out_dir):
 
 def main():
     input_path = sys.argv[1] if len(sys.argv) > 1 else "output/silence_dataset.parquet"
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else "output/model_full_with_random_forest"
+    out_dir = (
+        sys.argv[2] if len(sys.argv) > 2 else "output/model_full_with_random_forest"
+    )
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -124,9 +134,7 @@ def main():
     print(f"Nb aéroports : {df[AIRPORT_COL].nunique()}")
 
     if "has_lre_before" in df.columns:
-        alert_lre = (
-            df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
-        )
+        alert_lre = df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
         print("\nRépartition alertes LRE :")
         print(alert_lre.value_counts(normalize=True).sort_index())
 

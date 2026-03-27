@@ -236,3 +236,5 @@ impact_measurement_kit_/*.csv
 impact_measurement_kit_/impact_runs/*.csv
 impact_measurement_kit_/impact_runs/*.json
 
+output/*.csv
+output/*.parquet

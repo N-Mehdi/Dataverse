@@ -8,7 +8,6 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from build_silence_dataset import build_silence_dataset, INNER_RADIUS_KM
 
 
-
 def load_raw_dataset(path: str) -> pd.DataFrame:
     p = Path(path)
     if p.suffix == ".parquet":
@@ -51,15 +50,11 @@ def build_predictions_from_scores(
 
 
 def main():
-    input_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "data/data_test.csv"
-    )
+    input_path = sys.argv[1] if len(sys.argv) > 1 else "data/data_test.csv"
     model_path = (
         sys.argv[2]
         if len(sys.argv) > 2
-        else "output/model_full_with_xgboost/model_xgboost_full.pkl"
+        else "output/model_full_with_logistic/model_logistic_full.pkl"
     )
     output_path = sys.argv[3] if len(sys.argv) > 3 else "output/predictions.csv"
 

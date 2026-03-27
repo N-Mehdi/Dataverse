@@ -1,0 +1,21 @@
+{
+  "run_name": "infer_1_alert",
+  "hostname": "ensai-id-std017",
+  "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+  "python_version": "3.12.12",
+  "cpu_count_logical": 12,
+  "cpu_count_physical": 10,
+  "ram_total_gb": 30.986,
+  "gpus": [],
+  "start_time_epoch": 1774581422.6415286,
+  "end_time_epoch": 1774581425.367381,
+  "elapsed_seconds": 1.7093,
+  "emissions_kg_co2eq": 6.621598483401816e-07,
+  "max_rss_gb": 0.2999,
+  "max_cpu_percent": 22.4,
+  "avg_cpu_percent": 6.26,
+  "process_read_gb": 0.0,
+  "process_write_gb": 0.0,
+  "status": "success",
+  "notes": "Inférence unitaire"
+}

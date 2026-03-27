@@ -3,10 +3,6 @@ import { useState, useRef } from 'react'
 const API = ''
 const THETA = 0.906
 
-// ---------------------------------------------------------------------------
-// Design tokens
-// ---------------------------------------------------------------------------
-
 const c = {
   card: {
     background: 'var(--bg2)',
@@ -49,10 +45,6 @@ const c = {
     fontFamily: 'var(--sans)',
   },
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function BoltIcon({ size = 16, color = 'var(--bolt)' }) {
   return (
@@ -121,7 +113,6 @@ function MetricCard({ label, value, sub, accent }) {
   )
 }
 
-// Schéma CSV attendu
 const CSV_SCHEMA = [
   { col: 'lightning_id',                  type: 'int',     desc: 'Identifiant unique de l\'éclair' },
   { col: 'lightning_airport_id',          type: 'int',     desc: 'Identifiant éclair côté aéroport' },
@@ -236,14 +227,10 @@ function SummaryTable({ summary }) {
 }
 
 // ---------------------------------------------------------------------------
-// Page: Batch CSV (unique point d'entrée)
+// Page: Batch
 // ---------------------------------------------------------------------------
 
-function BatchTab() {
-  const [file, setFile]       = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult]   = useState(null)
-  const [error, setError]     = useState(null)
+function BatchTab({ file, setFile, result, setResult, error, setError, loading, setLoading }) {
   const [downloading, setDownloading] = useState(false)
   const [showSchema, setShowSchema] = useState(false)
 
@@ -253,7 +240,7 @@ function BatchTab() {
     try {
       const fd = new FormData(); fd.append('file', file)
       const res = await fetch(`${API}/predict/summary`, { method: 'POST', body: fd })
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Erreur serveur') }
+      if (!res.ok) { let msg = 'Erreur serveur'; try { const e = await res.json(); msg = e.detail || msg } catch {} throw new Error(msg) }
       setResult(await res.json())
     } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
@@ -285,7 +272,6 @@ function BatchTab() {
         </div>
         <div style={{ padding: '22px 26px' }}>
           <UploadZone onFile={setFile} file={file} />
-
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             <button
               onClick={handleAnalyse} disabled={!file || loading}
@@ -323,7 +309,6 @@ function BatchTab() {
               {showSchema ? 'Masquer' : 'Format CSV attendu'}
             </button>
           </div>
-
           {showSchema && <SchemaTable />}
         </div>
       </div>
@@ -338,12 +323,11 @@ function BatchTab() {
       {result && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-            <MetricCard label="Éclairs chargés"      value={result.meta.n_lightnings.toLocaleString('fr-FR')} accent="var(--blue)" />
-            <MetricCard label="Aéroports"             value={result.meta.n_airports} accent="var(--blue)" />
-            <MetricCard label="Alertes analysées"     value={result.n_alerts} accent="var(--bolt)" />
-            <MetricCard label="Fin alerte détectée"   value={nFin} sub={`sur ${result.n_alerts} alertes`} accent="var(--green)" />
+            <MetricCard label="Éclairs chargés"    value={result.meta.n_lightnings.toLocaleString('fr-FR')} accent="var(--blue)" />
+            <MetricCard label="Aéroports"           value={result.meta.n_airports} accent="var(--blue)" />
+            <MetricCard label="Alertes analysées"   value={result.n_alerts} accent="var(--bolt)" />
+            <MetricCard label="Fin alerte détectée" value={nFin} sub={`sur ${result.n_alerts} alertes`} accent="var(--green)" />
           </div>
-
           <div style={c.cardGlow}>
             <div style={{ padding: '18px 26px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -379,53 +363,53 @@ const FEATURE_GROUPS = [
     label: 'Comptages globaux',
     color: 'var(--blue)',
     features: [
-      { name: 'n_total',      desc: 'Nombre total d\'éclairs observés depuis obs_start' },
-      { name: 'n_cg',         desc: 'Nombre d\'éclairs nuage-sol (CG)' },
-      { name: 'n_ic',         desc: 'Nombre d\'éclairs intra-nuage (IC)' },
-      { name: 'n_inner',      desc: 'Nombre d\'éclairs dans la zone inner (< 20 km)' },
-      { name: 'n_outer',      desc: 'Nombre d\'éclairs dans la zone outer (≥ 20 km)' },
-      { name: 'n_cg_inner',   desc: 'Éclairs CG dans la zone inner' },
-      { name: 'n_cg_outer',   desc: 'Éclairs CG dans la zone outer' },
-      { name: 'n_ic_inner',   desc: 'Éclairs IC dans la zone inner' },
-      { name: 'n_ic_outer',   desc: 'Éclairs IC dans la zone outer' },
-      { name: 'n_lre',        desc: 'Nombre d\'éclairs très proches (< 3 km, LRE)' },
+      { name: 'n_total',    desc: 'Nombre total d\'éclairs observés depuis obs_start' },
+      { name: 'n_cg',       desc: 'Nombre d\'éclairs nuage-sol (CG)' },
+      { name: 'n_ic',       desc: 'Nombre d\'éclairs intra-nuage (IC)' },
+      { name: 'n_inner',    desc: 'Nombre d\'éclairs dans la zone inner (< 20 km)' },
+      { name: 'n_outer',    desc: 'Nombre d\'éclairs dans la zone outer (≥ 20 km)' },
+      { name: 'n_cg_inner', desc: 'Éclairs CG dans la zone inner' },
+      { name: 'n_cg_outer', desc: 'Éclairs CG dans la zone outer' },
+      { name: 'n_ic_inner', desc: 'Éclairs IC dans la zone inner' },
+      { name: 'n_ic_outer', desc: 'Éclairs IC dans la zone outer' },
+      { name: 'n_lre',      desc: 'Nombre d\'éclairs très proches (< 3 km, LRE)' },
     ],
   },
   {
     label: 'Amplitude & distance',
     color: '#a78bfa',
     features: [
-      { name: 'amp_abs_mean',       desc: 'Amplitude absolue moyenne de tous les éclairs' },
-      { name: 'amp_abs_max',        desc: 'Amplitude absolue maximale' },
-      { name: 'dist_mean',          desc: 'Distance moyenne à l\'aéroport (km)' },
-      { name: 'dist_min',           desc: 'Distance minimale à l\'aéroport (km)' },
+      { name: 'amp_abs_mean',         desc: 'Amplitude absolue moyenne de tous les éclairs' },
+      { name: 'amp_abs_max',          desc: 'Amplitude absolue maximale' },
+      { name: 'dist_mean',            desc: 'Distance moyenne à l\'aéroport (km)' },
+      { name: 'dist_min',             desc: 'Distance minimale à l\'aéroport (km)' },
       { name: 'last_event_amplitude', desc: 'Amplitude du dernier éclair observé' },
-      { name: 'last_event_dist',    desc: 'Distance du dernier éclair observé (km)' },
-      { name: 'last_event_type',    desc: 'Type du dernier éclair (CG / IC)' },
-      { name: 'last_event_zone',    desc: 'Zone du dernier éclair (inner / outer)' },
+      { name: 'last_event_dist',      desc: 'Distance du dernier éclair observé (km)' },
+      { name: 'last_event_type',      desc: 'Type du dernier éclair (CG / IC)' },
+      { name: 'last_event_zone',      desc: 'Zone du dernier éclair (inner / outer)' },
     ],
   },
   {
     label: 'Temps depuis dernier éclair',
     color: 'var(--green)',
     features: [
-      { name: 'time_since_last_event_min',     desc: 'Silence depuis le tout dernier éclair (min)' },
-      { name: 'time_since_last_cg_min',        desc: 'Silence depuis le dernier CG (min)' },
-      { name: 'time_since_last_ic_min',        desc: 'Silence depuis le dernier IC (min)' },
-      { name: 'time_since_last_inner_min',     desc: 'Silence depuis le dernier éclair inner (min)' },
-      { name: 'time_since_last_cg_inner_min',  desc: 'Silence depuis le dernier CG inner (min) - feature clé' },
+      { name: 'time_since_last_event_min',    desc: 'Silence depuis le tout dernier éclair (min)' },
+      { name: 'time_since_last_cg_min',       desc: 'Silence depuis le dernier CG (min)' },
+      { name: 'time_since_last_ic_min',       desc: 'Silence depuis le dernier IC (min)' },
+      { name: 'time_since_last_inner_min',    desc: 'Silence depuis le dernier éclair inner (min)' },
+      { name: 'time_since_last_cg_inner_min', desc: 'Silence depuis le dernier CG inner (min) - feature clé' },
     ],
   },
   {
     label: 'Inter-arrivées',
     color: 'var(--bolt)',
     features: [
-      { name: 'mean_interarrival_min',                        desc: 'Temps moyen entre deux éclairs consécutifs (min)' },
-      { name: 'median_interarrival_min',                      desc: 'Temps médian entre deux éclairs (min)' },
-      { name: 'max_interarrival_min',                         desc: 'Plus grand écart entre deux éclairs (min)' },
-      { name: 'current_silence_over_mean_interarrival',       desc: 'Silence actuel / inter-arrivée moyenne' },
-      { name: 'current_silence_over_median_interarrival',     desc: 'Silence actuel / inter-arrivée médiane' },
-      { name: 'current_silence_over_max_interarrival',        desc: 'Silence actuel / inter-arrivée maximale' },
+      { name: 'mean_interarrival_min',                    desc: 'Temps moyen entre deux éclairs consécutifs (min)' },
+      { name: 'median_interarrival_min',                  desc: 'Temps médian entre deux éclairs (min)' },
+      { name: 'max_interarrival_min',                     desc: 'Plus grand écart entre deux éclairs (min)' },
+      { name: 'current_silence_over_mean_interarrival',   desc: 'Silence actuel / inter-arrivée moyenne' },
+      { name: 'current_silence_over_median_interarrival', desc: 'Silence actuel / inter-arrivée médiane' },
+      { name: 'current_silence_over_max_interarrival',    desc: 'Silence actuel / inter-arrivée maximale' },
     ],
   },
   {
@@ -447,32 +431,29 @@ const FEATURE_GROUPS = [
     label: 'LRE & approche progressive',
     color: 'var(--red)',
     features: [
-      { name: 'has_lre_before',         desc: 'Au moins un éclair à < 3 km a été observé (0/1)' },
-      { name: 'time_since_last_lre_min',desc: 'Silence depuis le dernier éclair LRE (< 3 km)' },
-      { name: 'delta_dist_min_20_5',    desc: 'dist_min_last_20m − dist_min_last_5m (approche)' },
-      { name: 'delta_dist_mean_20_5',   desc: 'dist_mean_last_20m − dist_mean_last_5m' },
-      { name: 'n_lt_3km_last_10m',      desc: 'Nb éclairs à < 3 km sur les 10 dernières minutes' },
-      { name: 'n_lt_3km_last_20m',      desc: 'Nb éclairs à < 3 km sur les 20 dernières minutes' },
+      { name: 'has_lre_before',          desc: 'Au moins un éclair à < 3 km a été observé (0/1)' },
+      { name: 'time_since_last_lre_min', desc: 'Silence depuis le dernier éclair LRE (< 3 km)' },
+      { name: 'delta_dist_min_20_5',     desc: 'dist_min_last_20m − dist_min_last_5m (approche)' },
+      { name: 'delta_dist_mean_20_5',    desc: 'dist_mean_last_20m − dist_mean_last_5m' },
+      { name: 'n_lt_3km_last_10m',       desc: 'Nb éclairs à < 3 km sur les 10 dernières minutes' },
+      { name: 'n_lt_3km_last_20m',       desc: 'Nb éclairs à < 3 km sur les 20 dernières minutes' },
     ],
   },
 ]
 
 const PARAMS = [
-  ['Algorithme',        'XGBoost (binary:logistic)'],
-  ['n_estimators',      '100'],
-  ['max_depth',         '7'],
-  ['learning_rate',     '0.03'],
-  ['subsample',         '0.8'],
-  ['colsample_bytree',  '0.8'],
-  ['min_child_weight',  '1'],
-  ['reg_lambda',        '1.0'],
-  ['Seuil θ',           '0.906'],
-  ['Entraînement',      '100% des données'],
-  ['Préprocessing',     'SimpleImputer · OneHotEncoder'],
+  ['Algorithme',    'Régression Logistique (binary)'],
+  ['C',             '0.1'],
+  ['penalty',       'l1'],
+  ['solver',        'saga'],
+  ['max_iter',      '500'],
+  ['class_weight',  'None'],
+  ['Seuil θ',       '0.906'],
+  ['Entraînement',  '100% des données'],
+  ['Préprocessing', 'SimpleImputer · OneHotEncoder · StandardScaler'],
 ]
 
 function ModelPage() {
-  const totalFeatures = FEATURE_GROUPS.reduce((a, g) => a + g.features.length, 0)
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -488,10 +469,9 @@ function ModelPage() {
             &nbsp;<code style={{ fontFamily: 'var(--mono)', color: 'var(--text3)', fontSize: 15 }}>y = 0</code> → alerte encore active.</p>
             <br/>
             <p>Instants de décision générés toutes les <strong style={{ color: 'var(--text)' }}>3 min</strong> de silence,
-            jusqu'à <strong style={{ color: 'var(--text)' }}>30 min</strong> après le dernier éclair CG (Baseline).</p>
+            jusqu'à <strong style={{ color: 'var(--text)' }}>30 min</strong> après le dernier éclair CG.</p>
           </div>
         </div>
-
         <div style={c.card}>
           <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 17, fontWeight: 500, color: 'var(--text)' }}>
             Hyperparamètres
@@ -500,8 +480,8 @@ function ModelPage() {
             <tbody>
               {PARAMS.map(([k, v], i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg2)' : 'var(--bg3)' }}>
-                  <td style={{ ...c.td, color: 'var(--text3)', fontSize: 12 }}>{k}</td>
-                  <td style={{ ...c.td, color: 'var(--bolt)', fontSize: 13 }}>{v}</td>
+                  <td style={{ ...c.td, color: 'var(--text3)', fontSize: 14 }}>{k}</td>
+                  <td style={{ ...c.td, color: 'var(--bolt)', fontSize: 15 }}>{v}</td>
                 </tr>
               ))}
             </tbody>
@@ -511,25 +491,25 @@ function ModelPage() {
 
       <div style={c.card}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', fontSize: 15, fontWeight: 500, color: 'var(--text)' }}>
-          Features utilisées - 74 features au total (dont 27 via fenêtres glissantes ×3)
+          Features utilisées — 74 features au total (dont 27 via fenêtres glissantes ×3)
         </div>
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 24 }}>
           {FEATURE_GROUPS.map((group, gi) => (
             <div key={gi}>
-              <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: group.color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10, fontWeight: 500 }}>
+              <div style={{ fontSize: 13, fontFamily: 'var(--mono)', color: group.color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10, fontWeight: 500 }}>
                 {group.label}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
                 {group.features.map((f, fi) => (
                   <div key={fi} style={{
-                    padding: '9px 14px',
+                    padding: '10px 14px',
                     borderBottom: fi < group.features.length - 2 ? '1px solid var(--border)' : 'none',
                     borderRight: fi % 2 === 0 ? '1px solid var(--border)' : 'none',
                     background: fi % 4 < 2 ? 'var(--bg2)' : 'var(--bg3)',
-                    display: 'flex', flexDirection: 'column', gap: 2,
+                    display: 'flex', flexDirection: 'column', gap: 3,
                   }}>
-                    <code style={{ fontSize: 11, fontFamily: 'var(--mono)', color: group.color }}>{f.name}</code>
-                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>{f.desc}</span>
+                    <code style={{ fontSize: 13, fontFamily: 'var(--mono)', color: group.color }}>{f.name}</code>
+                    <span style={{ fontSize: 14, color: 'var(--text2)' }}>{f.desc}</span>
                   </div>
                 ))}
               </div>
@@ -581,12 +561,12 @@ function AboutPage() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: 'var(--border)' }}>
           {[
-            ['Modèle',   'XGBoost · sklearn pipeline', 'var(--bolt)'],
-            ['Backend',  'FastAPI · uvicorn',           'var(--blue)'],
-            ['Frontend', 'React · Vite',                'var(--green)'],
-            ['Features', '~50 features · silences décisionnels', 'var(--bolt)'],
-            ['Données',  'Météorage · 5 aéroports',     'var(--blue)'],
-            ['Seuil',    'θ = 0.906 · optimisé sur train', 'var(--green)'],
+            ['Modèle',   'Régression Logistique · sklearn', 'var(--bolt)'],
+            ['Backend',  'FastAPI · uvicorn',               'var(--blue)'],
+            ['Frontend', 'React · Vite',                    'var(--green)'],
+            ['Features', '74 features · silences décisionnels', 'var(--bolt)'],
+            ['Données',  'Météorage · 5 aéroports',         'var(--blue)'],
+            ['Seuil',    'θ = 0.906 · optimisé sur train',  'var(--green)'],
           ].map(([title, desc, color], i) => (
             <div key={i} style={{ background: 'var(--bg2)', padding: '18px 22px' }}>
               <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{title}</div>
@@ -600,52 +580,32 @@ function AboutPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Page: RSE (à compléter)
-// ---------------------------------------------------------------------------
-
-function RSEPage() {
-  return (
-    <div>
-      <div style={{ ...c.card, border: '1px dashed var(--border2)' }}>
-        <div style={{ padding: '40px 28px', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontFamily: 'var(--mono)', color: 'var(--text3)', marginBottom: 12 }}>
-            Section RSE - à compléter
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.8, maxWidth: 480, margin: '0 auto' }}>
-            Cette section accueillera les outils de calcul d'impact environnemental et social du projet :
-            consommation énergétique du modèle, empreinte carbone des prédictions, effets rebonds estimés.
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // App shell
 // ---------------------------------------------------------------------------
 
 const NAV = [
-  { id: 'batch',  label: 'Prédiction',  color: 'var(--bolt)' },
-  { id: 'model',  label: 'Modèle',      color: 'var(--blue)' },
-  { id: 'about',  label: 'À propos',    color: 'var(--text3)' },
-  { id: 'rse',    label: 'RSE',         color: 'var(--green)' },
+  { id: 'batch', label: 'Prédiction', color: 'var(--bolt)' },
+  { id: 'model', label: 'Modèle',     color: 'var(--blue)' },
+  { id: 'about', label: 'À propos',   color: 'var(--text3)' },
 ]
 
 const PAGE_TITLES = {
-  batch:  { title: 'Prédiction de fin d\'alerte', sub: 'Import CSV ou Parquet · calcul des silences décisionnels · XGBoost' },
-  model:  { title: 'Modèle XGBoost',              sub: 'Features · hyperparamètres · pipeline' },
-  about:  { title: 'À propos',                    sub: 'Data Battle 2026 · IA Pau × Météorage' },
-  rse:    { title: 'Responsabilité sociale',       sub: 'Impact environnemental et social du projet' },
+  batch: { title: 'Prédiction de fin d\'alerte', sub: 'Import CSV ou Parquet · calcul des silences décisionnels · Régression Logistique' },
+  model: { title: 'Modèle · Régression Logistique', sub: 'Features · hyperparamètres · pipeline' },
+  about: { title: 'À propos', sub: 'Data Battle 2026 · IA Pau × Météorage' },
 }
 
 export default function App() {
   const [tab, setTab] = useState('batch')
   const { title, sub } = PAGE_TITLES[tab]
 
+  const [batchFile, setBatchFile]       = useState(null)
+  const [batchResult, setBatchResult]   = useState(null)
+  const [batchError, setBatchError]     = useState(null)
+  const [batchLoading, setBatchLoading] = useState(false)
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
-
       <aside style={{
         width: 216, background: 'var(--bg2)',
         borderRight: '1px solid var(--border)',
@@ -688,7 +648,7 @@ export default function App() {
         </nav>
 
         <div style={{ paddingTop: 18, borderTop: '1px solid var(--border)', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)', lineHeight: 2 }}>
-          <div>XGBoost · sklearn</div>
+          <div>Logistic Regression · sklearn</div>
           <div>θ = 0.906</div>
           <div style={{ marginTop: 8, fontSize: 11 }}>IA Pau × Météorage</div>
         </div>
@@ -702,10 +662,14 @@ export default function App() {
           <p style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>{sub}</p>
         </div>
 
-        {tab === 'batch' && <BatchTab />}
+        {tab === 'batch' && <BatchTab
+          file={batchFile} setFile={setBatchFile}
+          result={batchResult} setResult={setBatchResult}
+          error={batchError} setError={setBatchError}
+          loading={batchLoading} setLoading={setBatchLoading}
+        />}
         {tab === 'model' && <ModelPage />}
         {tab === 'about' && <AboutPage />}
-        {tab === 'rse'   && <RSEPage />}
       </main>
     </div>
   )

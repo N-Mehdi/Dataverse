@@ -4,7 +4,7 @@
 
 - **Nom de l'équipe :** Dataverse
 - **Membres :**
-  - Mehdi NEJI
+  - Mehdi NEJI (représentant)
   - Ali BEN HADJ YAHIA
   - Lina GAROUACHI
 
@@ -20,7 +20,7 @@ Météorage, leader français de la détection foudre, gère des alertes foudre 
 
 ## 💡 Solution proposée
 
-Nous avons développé un pipeline de machine learning basé sur **XGBoost** qui, à partir des données brutes d'éclairs captées par le réseau Météorage, génère des instants de décision pendant les silences et prédit la probabilité que l'alerte foudre soit terminée.
+Nous avons développé un pipeline de machine learning basé sur une **régression logistique** qui, à partir des données brutes d'éclairs captées par le réseau Météorage, génère des instants de décision pendant les silences et prédit la probabilité que l'alerte foudre soit terminée.
 
 Le modèle calcule ~74 features à chaque instant de silence (comptages d'éclairs, distances, amplitudes, fenêtres glissantes 5/10/20 min, inter-arrivées, LRE) et produit un score de confiance. Un seuil θ = 0.906 a été optimisé pour lever les alertes.
 
@@ -47,17 +47,22 @@ La solution est exposée via une interface web (React) connectée à une API (Fa
 
 - Python 3.12+
 - Node.js 18+
-- Le fichier modèle entraîné : `output/model_full_with_xgboost/model_xgboost_full.pkl`
+- Le fichier des données initial : `segment_alerts_all_airports_train.csv` à placer dans `data/`
 
 ### Installation
 
+**Installer uv (si pas déjà installé) :**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+uv : un gestionnaire de packages Python ultra-rapide (remplaçant de pip + venv), développé par Astral.
+ 
 **Backend Python :**
 ```bash
 cd Dataverse
-python -m venv .venv
+uv sync
 source .venv/bin/activate       # Windows : .venv\Scripts\activate
-pip install -e .                 # installe les dépendances depuis pyproject.toml
-```
+````
 
 **Frontend React :**
 ```bash
@@ -74,8 +79,7 @@ Lancer les deux services en parallèle dans deux terminaux séparés.
 cd Dataverse
 source .venv/bin/activate
 uvicorn api:app --reload
-# API disponible sur http://localhost:8000
-# Documentation interactive sur http://localhost:8000/docs
+# Documentation interactive (Swagger) disponible sur http://localhost:8000/docs
 ```
 
 **Terminal 2 - Frontend :**
@@ -99,24 +103,27 @@ npm run dev
 
 ```
 Dataverse/
-├── api.py                          # Backend FastAPI
+├── api.py                              # Backend FastAPI
 ├── src/
-│   ├── predict.py                  # Pipeline de prédiction
-│   ├── build_silence_dataset.py    # Construction des silences décisionnels
-│   └── xgboost_onall.py            # Entraînement du modèle
-├── output/
-│   └── model_full_with_xgboost/
-│       ├── model_xgboost_full.pkl  # Modèle entraîné
-│       └── feature_columns.csv
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx                 # Interface React
-|   |   ├── index.css
-│   │   └── main.jsx
-|   |   index.html
-│   ├── package.json
-│   └── vite.config.js
-├── data/                           # Données brutes (non versionnées) et notebook (analyses)
+│   ├── Logistic_Regression/      
+│   │   ├── Logistic_Regression.py                          # Entraîné sur les données tests (optimisé)
+│   │   ├── Logistic_Regression_On_All_Data.py              # Entraîné sur toutes les données (omptimisé)
+│   │   └── Logistic_Regression_Hyperparameter_Search.py    # Optimise les hyperpamètres du modèle
+│   ├── Random_Forest/
+│   │   └── ...
+│   ├── XGboost/
+│   │   └── ...
+│   ├── build_silence_dataset.py        # Construction des silences décisionnels
+│   ├── predict.py                      # Pipeline de prédiction
+│   ├── main.py                         # Orchestration complète du pipeline
+│   ├── main_plots.py                   # Visualisation ROC + analyse θ
+│   ├── theta_analysis_logistic.py      # Calcul du seuil θ - Logistique
+│   └── theta_analysis_xgboost.py       # Calcul du seuil θ - XGBoost
+├── output/                             # Modèles entraînés et résultats (pkl non versionnés)
+├── frontend/                           # Interface React
+├── impact_measurement_kit_/            # Outils de mesure RSE
+├── doc/                                # Documentation des features
+├── data/                               # Données brutes (non versionnées) et notebook d'analyse
 ├── pyproject.toml
 └── README.md
 ```

@@ -29,11 +29,11 @@ NON_FEATURE_COLS = {
 
 BEST_SPECS = {
     "logistic": {
-        "C": None,               # à remplir après recherche hyperparamètres
-        "penalty": None,         # à remplir après recherche hyperparamètres
-        "solver": None,          # à remplir après recherche hyperparamètres
-        "max_iter": None,        # à remplir après recherche hyperparamètres
-        "class_weight": None,    # à remplir après recherche hyperparamètres
+        "C": 0.1,
+        "penalty": "l1",
+        "solver": "saga",
+        "max_iter": 500,
+        "class_weight": None,
     }
 }
 
@@ -53,20 +53,26 @@ def build_feature_lists(df: pd.DataFrame):
 
 
 def make_preprocessor(numeric_cols, categorical_cols):
-    numeric_pipe = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
+    numeric_pipe = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
 
-    categorical_pipe = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore")),
-    ])
+    categorical_pipe = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore")),
+        ]
+    )
 
-    return ColumnTransformer([
-        ("num", numeric_pipe, numeric_cols),
-        ("cat", categorical_pipe, categorical_cols),
-    ])
+    return ColumnTransformer(
+        [
+            ("num", numeric_pipe, numeric_cols),
+            ("cat", categorical_pipe, categorical_cols),
+        ]
+    )
 
 
 def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
@@ -85,10 +91,12 @@ def build_model_pipeline(model_name, params, numeric_cols, categorical_cols):
     else:
         raise ValueError(f"Modèle inconnu : {model_name}")
 
-    return Pipeline([
-        ("preprocess", preproc),
-        ("model", model),
-    ])
+    return Pipeline(
+        [
+            ("preprocess", preproc),
+            ("model", model),
+        ]
+    )
 
 
 def fit_final_models(df, best_specs, out_dir):
@@ -123,9 +131,7 @@ def main():
     print(f"Nb aéroports : {df[AIRPORT_COL].nunique()}")
 
     if "has_lre_before" in df.columns:
-        alert_lre = (
-            df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
-        )
+        alert_lre = df.groupby(GROUP_COL)["has_lre_before"].max().fillna(0).astype(int)
         print("\nRépartition alertes LRE :")
         print(alert_lre.value_counts(normalize=True).sort_index())
 
