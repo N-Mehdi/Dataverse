@@ -236,6 +236,9 @@ impact_measurement_kit_/*.json
 impact_measurement_kit_/*.csv
 impact_measurement_kit_/impact_runs/*.csv
 impact_measurement_kit_/impact_runs/*.json
+impact_measurement_kit_/impact_runs_xgboost
+impact_measurement_kit_/impact_runs_random_forest
+impact_measurement_kit_/impact_runs_logistic
 
 output/*.csv
 output/*.parquet
