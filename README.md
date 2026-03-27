@@ -89,6 +89,14 @@ npm run dev
 # Interface disponible sur http://localhost:3000
 ```
 
+### Exécution
+**Courbes ROC des modèles  
+Courbe du compromis gain / risque**
+```bash
+python src/main_plots.py
+```
+
+
 ### Utilisation
 
 1. Ouvrir `http://localhost:3000`

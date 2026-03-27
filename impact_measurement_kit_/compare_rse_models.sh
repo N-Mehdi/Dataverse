@@ -1,5 +1,5 @@
 #!/bin/bash
-# compare_rse_models.sh — Mesure RSE des 3 modèles + comparaison
+# compare_rse_models.sh - Mesure RSE des 3 modèles + comparaison
 # Usage : bash impact_measurement_kit_/compare_rse_models.sh
 
 set -e
@@ -18,7 +18,7 @@ for MODEL_NAME in "${!MODELS[@]}"; do
     OUT_DIR="impact_measurement_kit_/impact_runs_${MODEL_NAME}"
 
     if [ ! -f "$MODEL_PATH" ]; then
-        echo "[SKIP] $MODEL_NAME — fichier introuvable : $MODEL_PATH"
+        echo "[SKIP] $MODEL_NAME - fichier introuvable : $MODEL_PATH"
         continue
     fi
 
@@ -88,7 +88,7 @@ if not batch.empty:
     best = batch.loc[batch["score_rse"].idxmin(), "modele"]
     worst = batch.loc[batch["score_rse"].idxmax(), "modele"]
 
-    print("\n── Score RSE (batch 1000 alertes — plus bas = plus sobre) ─────")
+    print("\n── Score RSE (batch 1000 alertes - plus bas = plus sobre) ─────")
     print(batch[["modele", "duree_s", "ram_max_gb", "cpu_moy_%", "emissions_kgco2", "score_rse"]].to_string(index=False))
 
     print(f"\n✅  Modèle le plus sobre  : {best.upper()}")
