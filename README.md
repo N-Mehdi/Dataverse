@@ -78,6 +78,11 @@ Courbe du compromis gain / risque pour le modèle logistique (possible pour xgbo
 python src/main_plots.py
 ```
 
+**Diagnostic RSE des modèles**
+```bash
+bash impact_measurement_kit_/compare_rse_models.sh
+```
+
 Lancer les deux services en parallèle dans deux terminaux séparés.
 
 **Terminal 1 - Backend API :**
@@ -93,11 +98,6 @@ uvicorn api:app --reload
 cd Dataverse/frontend
 npm run dev
 # Interface disponible sur http://localhost:3000
-```
-
-**Diagnostic RSE des modèles**
-```bash
-bash impact_measurement_kit_/compare_rse_models.sh
 ```
 
 
