@@ -1,0 +1,21 @@
+{
+  "run_name": "build_dataset",
+  "hostname": "ensai-id-std017",
+  "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+  "python_version": "3.12.12",
+  "cpu_count_logical": 12,
+  "cpu_count_physical": 10,
+  "ram_total_gb": 30.986,
+  "gpus": [],
+  "start_time_epoch": 1774577131.0353467,
+  "end_time_epoch": 1774577181.8008838,
+  "elapsed_seconds": 50.2184,
+  "emissions_kg_co2eq": 1.0264847710923e-05,
+  "max_rss_gb": 0.1185,
+  "max_cpu_percent": 36.8,
+  "avg_cpu_percent": 10.0,
+  "process_read_gb": 0.0,
+  "process_write_gb": 0.005,
+  "status": "success",
+  "notes": "Construction du dataset décisionnel"
+}
