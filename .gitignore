@@ -241,3 +241,4 @@ output/*.csv
 output/*.parquet
 
 data/*.html
+data/exploration.ipynb
